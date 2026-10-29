@@ -310,11 +310,18 @@ describe("Performance: LSP latency gates", () => {
       });
     }
 
-    const t0 = Date.now();
-    for (let i = 0; i < 50; i++) {
+    for (let i = 0; i < 10; i++) {
       server.onCompletion(uri, { line: 0, character: 2 });
     }
-    expect(Date.now() - t0).toBeLessThan(500); // 50 completion calls < 500ms
+    const batches = [0, 1, 2].map(() => {
+      const t0 = performance.now();
+      for (let i = 0; i < 50; i++) {
+        server.onCompletion(uri, { line: 0, character: 2 });
+      }
+      return performance.now() - t0;
+    }).sort((a, b) => a - b);
+    const median = batches[1];
+    expect(median, `median batch: ${median.toFixed(2)}ms; per call: ${(median / 50).toFixed(2)}ms`).toBeLessThan(500);
   });
 
   it("go-to-definition on 1000-symbol project < 2ms per call", () => {

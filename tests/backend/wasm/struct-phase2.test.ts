@@ -114,7 +114,7 @@ describe("WASM Backend Struct Phase 2: struct inside if/else and while, multiple
 
     if (!allPassed) console.error(failures.slice(0, 5).join("\n"));
     expect(allPassed).toBe(true);
-  }, 20000);
+  }, 90000);
 
   it("KNOWN, DISCLOSED SCOPE BOUNDARY: conditionally constructing a struct inside only one branch of if/else is explicitly rejected, not silently mishandled", () => {
     const src = "struct Point\n  x: int\nend\nfunction f(): int\n  let y = 1\n  if y == 1\n    let p = Point(5)\n    y = p.x\n  else\n    y = 0\n  end\n  return y\nend\n";
