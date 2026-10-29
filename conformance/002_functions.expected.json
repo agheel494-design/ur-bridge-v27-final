@@ -1,0 +1,20 @@
+{
+  "name": "002_functions",
+  "parseDiagnostics": [],
+  "typecheckDiagnostics": [],
+  "lowerOk": true,
+  "lowerDiagnostics": [],
+  "irSummary": {
+    "functionCount": 2,
+    "instructionKindCounts": {
+      "param": 2,
+      "binop": 1,
+      "const": 2,
+      "call": 1
+    }
+  },
+  "cCompiles": true,
+  "cRuntimeExitCode": 7,
+  "wasmAccepted": true,
+  "wasmRuntimeResult": "7"
+}

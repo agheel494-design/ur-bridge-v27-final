@@ -1,0 +1,7 @@
+{
+  "name": "cmath",
+  "version": "0.1.0",
+  "runtime": "c",
+  "module": "mathlib",
+  "exports": { "squareFn": "square" }
+}

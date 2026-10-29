@@ -1,0 +1,5 @@
+function main(): int
+  let arr = [1, 2, 3]
+  arr[0] = 99
+  return arr[0]
+end

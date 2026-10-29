@@ -1,0 +1,9 @@
+{
+    "name":  "bigints",
+    "runtime":  "python",
+    "module":  "bigints_adapter",
+    "exports":  {
+                    "exactSum":  "exact_sum"
+                },
+    "version":  "1.0.0"
+}

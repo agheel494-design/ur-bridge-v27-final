@@ -1,0 +1,588 @@
+﻿**********************
+Windows PowerShell transcript start
+Start time: 20261024223325
+Username: عقيل\عقيل
+RunAs User: عقيل\عقيل
+Configuration Name: 
+Machine: عقيل (Microsoft Windows NT 10.0.19045.0)
+Host Application: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe
+Process ID: 12412
+PSVersion: 5.1.19041.7802
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.19041.7802
+BuildVersion: 10.0.19041.7802
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+
+=== 1. C RUNTIME ALLOCATOR ===
+    if (ur_gc_alloc_count_since_gc >= ur_gc_param_n) return 1;
+    if (ur_gc_bytes_since_gc >= ur_gc_param_b) return 1;
+    if (ur_gc_live_bytes_baseline >= ur_gc_param_r_floor) {
+        // Guard against a double->int64_t comparison itself overflowing
+        // for a pathologically large baseline*R; in any realistic
+        // scenario (per Gate A9.5.6's own overflow analysis) this branch
+        // is only ever reached with baseline values many orders of
+        // magnitude below where that would matter.
+        double threshold = ur_gc_param_r * (double)ur_gc_live_bytes_baseline;
+        if ((double)ur_gc_bytes_since_gc >= threshold) return 1;
+    }
+    return 0;
+}
+
+int64_t* ur_gc_alloc_array(int64_t length, UrGcElementKind element_kind) {
+    // GC Trigger Contract (Gate A9.5.3, extended by the Gate A9.5.6
+    // frozen hybrid contract in A9.5.7): the safepoint decision and
+    // any resulting collection happen HERE, BEFORE the new object is
+    // allocated â€” this remains the ONLY automatic-collection entry
+    // point in the entire runtime. At this exact point, per the GC
+    // Safepoint proof (Gate A9.5.2), everything already allocated in
+    // this or any calling frame is already correctly rooted, and
+    // nothing new exists yet that could be incorrectly swept.
+    if (ur_gc_should_trigger()) {
+        ur_gc_collect(); // resets alloc_count_since_gc, bytes_since_gc
+                          // to 0 and sets live_bytes_baseline to the
+                          // value accumulated during THIS sweep pass
+                          // itself (Gate A9.5.6's own Decision 3) â€”
+                          // done inside ur_gc_collect() itself, below.
+        ur_gc_automatic_collect_total++;
+    }
+    int64_t this_allocation_bytes = (int64_t)sizeof(UrGcHeader) + length * (int64_t)sizeof(int64_t);
+    UrGcHeader *header = (UrGcHeader *)malloc((size_t)this_allocation_bytes);
+    if (!header) {
+        ur_panic("ur_gc_alloc_array: out of memory");
+    }
+    header->next = ur_gc_all_allocations;
+    header->length = length;
+    header->marked = 0;
+    header->element_kind = element_kind;
+    ur_gc_all_allocations = header;
+    int64_t *data = (int64_t *)(header + 1);
+    memset(data, 0, (size_t)length * sizeof(int64_t));
+    ur_gc_alloc_count_since_gc = ur_gc_saturating_add(ur_gc_alloc_count_since_gc, 1);
+    ur_gc_bytes_since_gc = ur_gc_saturating_add(ur_gc_bytes_since_gc, this_allocation_bytes);
+    return data;
+}
+
+
+int64_t ur_array_length(int64_t *ref) {
+    return ur_gc_header_of(ref)->length;
+}
+
+// â”€â”€ Shadow Stack / Precise Roots (Gate A9.3) â€” implementation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+#define UR_GC_SHADOW_STACK_CAPACITY 65536
+static int64_t *ur_gc_shadow_stack[UR_GC_SHADOW_STACK_CAPACITY];
+static int64_t ur_gc_shadow_top = 0;
+
+int64_t ur_gc_push_frame(int64_t count) {
+    if (ur_gc_shadow_top + count > UR_GC_SHADOW_STACK_CAPACITY) {
+        ur_panic("ur_gc_push_frame: shadow stack overflow");
+    }
+    int64_t base = ur_gc_shadow_top;
+    for (int64_t i = 0; i < count; i++) ur_gc_shadow_stack[base + i] = NULL;
+    ur_gc_shadow_top += count;
+    return base;
+}
+
+void ur_gc_pop_frame(int64_t count) {
+
+=== 2. WASM ARRAY HEADER WRITER ===
+// a real WebAssembly.Module() CompileError this round ("i64.load[0]
+// expected type i32, found i64.load of type i64") â€” the Contract's
+// own semantic decision (reference = i32 address) cannot be realized
+// without a genuinely distinct runtime read/write path at exactly
+// this point; this is that path, and nothing more.
+/** Emits `i32.load` at the address computed by `encodeElementAddress()` â€” reads one array_ref element (a nested-array reference: a base address only). */
+export function encodeArrayRefElementLoad(arrayBaseExpr: Uint8Array, indexExpr: Uint8Array): Uint8Array {
+  return concatBytes(encodeElementAddress(arrayBaseExpr, indexExpr), new Uint8Array([OPCODE_I32_LOAD]), MEMARG_ALIGN4_OFFSET0);
+}
+
+/** Emits `i32.store` at the address computed by `encodeElementAddress()` â€” writes one array_ref element. `valueExpr` must push exactly one `i32` value. */
+export function encodeArrayRefElementStore(arrayBaseExpr: Uint8Array, indexExpr: Uint8Array, valueExpr: Uint8Array): Uint8Array {
+  return concatBytes(encodeElementAddress(arrayBaseExpr, indexExpr), valueExpr, new Uint8Array([OPCODE_I32_STORE]), MEMARG_ALIGN4_OFFSET0);
+}
+
+/** Emits `i64.store` of `length` at `arrayBaseExpr` + offset 0 â€” writes the array's header. */
+export function encodeArrayHeaderStore(arrayBaseExpr: Uint8Array, length: number): Uint8Array {
+  return concatBytes(arrayBaseExpr, new Uint8Array([OPCODE_I64_CONST]), encodeSLEB128(BigInt(length)), new Uint8Array([OPCODE_I64_STORE]), MEMARG_ALIGN8_OFFSET0);
+}
+
+/**
+ * Emits the bump-allocation sequence for one array of `elementCount`
+ * elements: read the bump Global into `localIndex` (this array's base
+ * address, an i32 local reused for every subsequent access to this
+ * array within the function), then advance the bump Global by this
+ * array's total size (`ARRAY_HEADER_SIZE + elementCount * ELEMENT_SIZE`
+ * â€” the SAME two named constants as every other computation in this
+ * module, per the single-source-of-truth requirement).
+ */
+export function encodeArrayAllocation(bumpGlobalIndex: number, localIndex: number, elementCount: number): Uint8Array {
+  const totalSize = ARRAY_HEADER_SIZE + elementCount * ELEMENT_SIZE;
+  const OPCODE_LOCAL_SET = 0x21;
+  return concatBytes(
+    new Uint8Array([OPCODE_GLOBAL_GET]), encodeULEB128(bumpGlobalIndex),
+    new Uint8Array([OPCODE_LOCAL_SET]), encodeULEB128(localIndex),
+    new Uint8Array([OPCODE_GLOBAL_GET]), encodeULEB128(bumpGlobalIndex),
+    new Uint8Array([OPCODE_I32_CONST]), encodeSLEB128(BigInt(totalSize)),
+    new Uint8Array([OPCODE_I32_ADD]),
+    new Uint8Array([OPCODE_GLOBAL_SET]), encodeULEB128(bumpGlobalIndex),
+  );
+}
+
+/** Encodes the module's `global` section: exactly one mutable `i32` global (the bump pointer), initialized to `BUMP_INITIAL_ADDRESS`. */
+export function encodeGlobalSection(): Uint8Array {
+  const SECTION_GLOBAL = 6;
+  const VALTYPE_I32 = 0x7f;
+  const MUTABLE = 0x01;
+  const globalEntry = concatBytes(
+    new Uint8Array([VALTYPE_I32, MUTABLE, OPCODE_I32_CONST]), encodeSLEB128(BigInt(BUMP_INITIAL_ADDRESS)), new Uint8Array([OPCODE_END]),
+  );
+
+=== 3. WASM ARRAY SLOT MAPPING ===
+  // still need the shared index-materialization scratch).
+  const hasAnyArrayAccess = arraySlots.length > 0 || fn.locals.some(l => l.isArrayParam === true);
+  const arrayIndexScratchCount = hasAnyArrayAccess ? 1 : 0;
+  // FIX (per issues/wasm-loop-local-let-affecting-outer-state.md,
+  // PATCH_DESIGN_WASM_SSA.md, Stage 4): one dedicated scratch local per
+  // i64-typed "leaf" SSA instruction (const/load/binop) that appears as
+  // a top-level entry in any block's own instructions â€” materialized
+  // exactly once, at its own position in the instruction stream, so a
+  // later `store` referencing it (even after an intervening store to
+  // one of its own dependencies) reads the materialized value, not a
+  // lazily-re-derived one. Placed AFTER the array-index scratch (not
+  // before it) so getIndexScratchLocalIndex()'s own, separately-computed
+  // index is unaffected by this new block's size. Count recomputed via
+  // getMaterializedIds() (matching this file's own established
+  // self-recomputation convention) rather than duplicated inline.
+  //
+  // V2-MU: getMaterializedIds() now also returns string- and
+  // f64-range materialized ids (see STRING_MATERIALIZED_BASE/
+  // F64_MATERIALIZED_BASE) - .size alone would incorrectly count
+  // those toward the i64 group's own declared size (they get their
+  // own, separate i32/f64 groups below). Filtered to i64-range only,
+  // matching resolveMaterializedLocalIndex()'s own identical filter
+  // exactly - this MUST stay in sync with that function.
+  const materializedScratchCount = [...getMaterializedIds(fn).values()].filter(v => v < STRING_MATERIALIZED_BASE).length;
+  const i64LocalCount = paramCount + scalarSlots.length + arrayIndexScratchCount + materializedScratchCount;
+  const arrayBaseLocalIndexBySlotId = new Map(arraySlots.map((l, i) => [l.id, i64LocalCount + i] as const));
+  // V29-D2 (fix B/آ§3): an array-typed PARAMETER's own base address is
+  // its own already-existing WASM parameter local - NOT a new entry
+  // in the same freshly-bump-allocated pool `arraySlots` above feeds.
+  // Its own WASM local index equals its own POSITION in fn.params
+  // (matching WASM's native parameter-local convention) - found by
+  // NAME, not by slot id (v29-D2-RD's own direct, empirical finding:
+  // slot ids and parameter positions are different numbering schemes
+  // entirely; fn.locals has no entry at all for scalar parameters,
+  // so slot id 0 does not generally mean "parameter 0").
+  for (const local of fn.locals) {
+    if (local.isArrayParam !== true) continue;
+    const paramIndex = fn.params.findIndex(p => p.name === local.name);
+    if (paramIndex === -1) {
+      throw new WasmUnsupportedError({ code: WASM_CODES.UNSUPPORTED_INSTRUCTION, functionName: fn.sourceName, message: `internal error: array-param local '${local.name}' (slot ${local.id}) has no matching entry in fn.params` });
+    }
+    arrayBaseLocalIndexBySlotId.set(local.id, paramIndex);
+  }
+  // Struct support, Phase 1 (per WASM_BUMP_ALLOCATOR_STUDY.md آ§4, point
+  // 2): one i32 WASM local per struct slot, indices continuing right
+  // after arrays' own indices - the exact same treatment
+  // arrayBaseLocalIndexBySlotId already gets, mirrored precisely.
+  const structSlots = fn.locals.filter(l => l.structLayout !== undefined);
+  const structBaseLocalIndexBySlotId = new Map(structSlots.map((l, i) => [l.id, i64LocalCount + arraySlots.length + i] as const));
+  // V2-M2 (Design approved, narrow scope): one i32 WASM local per
+  // string-typed slot, indices continuing right after structs' own -
+  // the exact same treatment arrayBaseLocalIndexBySlotId/
+  // structBaseLocalIndexBySlotId already get, mirrored precisely (a
+  // string is a linear-memory offset, same native width as an array
+  // base or struct base). Merged directly into localIndexBySlotId
+  // (not a new, separate map) since the existing "load"/"store" IR
+  // instruction encoders already consult exactly that one map by
+  // slot id, and are value-type-agnostic at the WASM bytecode level
+  // (local.get/local.set reference an index; the declared valtype at
+  // that index is what's declared below - correct because
+  // localIndexBySlotId now points string slots at real, declared i32
+  // locals) - no change needed to the load/store encoders themselves.
+  const stringSlots = fn.locals.filter(l => l.type === "string" && l.isArray !== true);
+  const stringLocalBase = i64LocalCount + arraySlots.length + structSlots.length;
+  stringSlots.forEach((l, i) => localIndexBySlotId.set(l.id, stringLocalBase + i));
+  // V2-M2: a multi-use string-typed call result (e.g. `let s = input();
+  // print(s); free(s)`) needs its own materialized i32 scratch local,
+  // positioned after strings' own group - see getMaterializedIds()'s
+  // own comment for why this can't share the i64 materialization
+  // group above.
+  const stringMaterializedCount = [...getMaterializedIds(fn).values()].filter(v => v >= STRING_MATERIALIZED_BASE && v < F64_MATERIALIZED_BASE).length;
+  // v29-D4 (Nested Array Model): ONE dedicated i32 scratch local,
+  // allocated whenever the function contains at least one baseRef-
+  // driven array_load/array_store. Required because a baseRef's own
+  // expression, when re-emitted inline (the ONLY option before this
+
+=== 4. WASM FIRST-STORE ALLOCATION ===
+          )
+        : new Uint8Array(0);
+      if (inst.baseRef) parts.push(setBaseScratchForStore);
+      const baseLocalIndex = inst.baseRef ? baseRefScratchForStore : arrayBaseLocalIndexBySlotId.get(inst.slot);
+      if (baseLocalIndex === undefined) {
+        // Unreachable given validateScope() already ran â€” defensive only.
+        throw new WasmUnsupportedError({ code: WASM_CODES.UNSUPPORTED_INSTRUCTION, functionName: fn.sourceName, message: `internal error: expected a validated array base local for slot ${inst.slot}` });
+      }
+      const slotMeta = fn.locals.find(l => l.id === inst.slot);
+      // V29-D2 (fix B): a parameter's own array is already allocated by
+      // the caller â€” it must NEVER be bump-allocated or have its
+      // header (re)written here, unlike a literal array's own
+      // first-store allocation. Guarded explicitly by isArrayParam,
+      // not merely by allocatedArraySlots' own tracking (which was
+      // never designed with parameter slots in mind at all).
+      // v29-D5: a baseRef-driven write targets an EXISTING array (the
+      // one baseRef's own expression already resolved to) â€” it must
+      // NEVER be bump-allocated or have its header rewritten either,
+      // for the identical reason as an array parameter. Confirmed
+      // necessary directly: without this guard, `b.values[1] = 99`
+      // would have re-allocated and overwritten the header of an
+      // already-live array, corrupting it.
+      if (slotMeta?.isArrayParam !== true && !inst.baseRef) {
+        const elementCount = slotMeta?.length ?? 1;
+        if (!allocatedArraySlots.has(inst.slot)) {
+          allocatedArraySlots.add(inst.slot);
+          parts.push(encodeArrayAllocation(bumpGlobalIndex, baseLocalIndex, elementCount));
+          const arrayBaseExprForHeader = concatBytes(new Uint8Array([OPCODE_LOCAL_GET]), encodeULEB128(baseLocalIndex));
+          parts.push(encodeArrayHeaderStore(arrayBaseExprForHeader, elementCount));
+        }
+      }
+      const arrayBaseExpr = concatBytes(new Uint8Array([OPCODE_LOCAL_GET]), encodeULEB128(baseLocalIndex));
+      const rawIndexExpr = encodeExpr(inst.index.id, instructionsById, functionIndexByName, fn, localIndexBySlotId, arrayBaseLocalIndexBySlotId);
+      // v29-D4 (Gap A, Nested Literal Construction): when the stored
+      // VALUE is itself an array reference (arraySlot set, the SAME
+      // sentinel shape already proven for call arguments â€” D2's own
+      // work), it is NOT an ordinary SSA value â€” encodeExpr(-1, ...)
+      // would throw "no definition found for id %-1" (confirmed
+      // directly by a real emission attempt this round). The correct
+      // value is a direct read of the referenced inner array's own
+      // existing base-address local â€” the SAME local
+      // arrayBaseLocalIndexBySlotId already tracks for it, requiring
+      // no new allocation, no new local group.
+      const valueExpr = inst.value.arraySlot !== undefined
+        ? (() => {
+
+=== 5. EXISTING ZERO-LENGTH TESTS ===
+
+
+Path       : D:\ur-bridge-v27-final\tests\backend\c\e2e-compile-run.test.ts
+LineNumber : 154
+Line       :       if (parseErrors.length > 0) { expect(parseErrors.length).toBeGreaterThan(0);
+             return; } // some may not even parse-check cleanly, which is also acceptable
+             rejection
+
+Path       : D:\ur-bridge-v27-final\tests\backend\c\e2e-compile-run.test.ts
+LineNumber : 169
+Line       :     expect(parseErrors).toHaveLength(0);
+
+Path       : D:\ur-bridge-v27-final\tests\backend\c\e2e-compile-run.test.ts
+LineNumber : 588
+Line       :     expect(sem.diagnostics).toHaveLength(0);
+
+Path       : D:\ur-bridge-v27-final\tests\backend\c\e2e-compile-run.test.ts
+LineNumber : 590
+Line       :     expect(types.diagnostics).toHaveLength(0);
+
+Path       : D:\ur-bridge-v27-final\tests\backend\c\e2e-compile-run.test.ts
+LineNumber : 716
+Line       :     expect(sem.diagnostics).toHaveLength(0);
+
+Path       : D:\ur-bridge-v27-final\tests\backend\c\e2e-compile-run.test.ts
+LineNumber : 718
+Line       :     expect(types.diagnostics).toHaveLength(0);
+
+Path       : D:\ur-bridge-v27-final\tests\backend\c\e2e-compile-run.test.ts
+LineNumber : 812
+Line       :     expect(sem.diagnostics).toHaveLength(0);
+
+Path       : D:\ur-bridge-v27-final\tests\backend\c\e2e-compile-run.test.ts
+LineNumber : 814
+Line       :     expect(types.diagnostics).toHaveLength(0);
+
+Path       : D:\ur-bridge-v27-final\tests\backend\c\e2e-compile-run.test.ts
+LineNumber : 898
+Line       :     expect(sem.diagnostics).toHaveLength(0);
+
+Path       : D:\ur-bridge-v27-final\tests\backend\c\e2e-compile-run.test.ts
+LineNumber : 900
+Line       :     expect(types.diagnostics).toHaveLength(0);
+
+Path       : D:\ur-bridge-v27-final\tests\backend\wasm\differential\differential.test.ts
+LineNumber : 80
+Line       :           expect(cObs.stdout.trim().split("\n").filter(l => l.length > 0).length,
+             "counter()'s own print(...) side effect must fire exactly once on C").toBe(1);
+
+Path       : D:\ur-bridge-v27-final\tests\backend\wasm\emit-wasm.test.ts
+LineNumber : 46
+Line       :   const cPrinted = cObs.stdout.trim().split("\n").filter(l => l.length > 0);
+
+Path       : D:\ur-bridge-v27-final\tests\backend\wasm\emit-wasm.test.ts
+LineNumber : 127
+Line       :     const typeSection = concatBytes(1, withLength(encodeVector([concatBytes(0x60,
+             encodeVector([]), encodeVector([new Uint8Array([0x7e])]))])));
+
+Path       : D:\ur-bridge-v27-final\tests\backend\wasm\emit-wasm.test.ts
+LineNumber : 128
+Line       :     const funcSection = concatBytes(3, withLength(encodeVector([new
+             Uint8Array([0x00])])));
+
+Path       : D:\ur-bridge-v27-final\tests\backend\wasm\emit-wasm.test.ts
+LineNumber : 130
+Line       :     const exportEntry = concatBytes(nameBytes.length, nameBytes, 0x00, 0x00);
+
+Path       : D:\ur-bridge-v27-final\tests\backend\wasm\emit-wasm.test.ts
+LineNumber : 132
+Line       :     const body = withLength(concatBytes(encodeVector([]), 0x42,
+             encodeSLEB128(-17n), 0x0f, 0x0b));
+
+Path       : D:\ur-bridge-v27-final\tests\backend\wasm\emit-wasm.test.ts
+LineNumber : 941
+Line       :   it("a single 3-element array lands at EXACTLY the offsets
+             WASM_MEMORY_MODEL_SPEC.md section 2 specifies (length at +0, elements at
+             +8/+16/+24 relative to base)", async () => {
+
+Path       : D:\ur-bridge-v27-final\tests\backend\wasm\emit-wasm.test.ts
+LineNumber : 1014
+Line       :   it("the length field is at offset +0 and the first element is at offset
+             +ARRAY_HEADER_SIZE, relative to the array's base - confirmed against real emitted
+             memory, not merely the constants in isolation. NOTE: uses a 2-element array, not 1
+             - a single-element array (length===1) is a PRE-EXISTING, documented Level 2.8 edge
+             case (IRLocalSlot.length's own doc comment: 'undefined/1 means scalar') that the
+             ALREADY-FROZEN C Backend itself cannot compile either (confirmed directly: it
+             emits invalid C, declaring a scalar then indexing it as an array) - out of scope
+             for this batch, not a WASM Backend defect.", async () => {
+
+Path       : D:\ur-bridge-v27-final\tests\backend\wasm\emit-wasm.test.ts
+LineNumber : 1410
+Line       : describe("WASM Backend - ARRAY_SINGLE_ALLOCATION_CONTRACT (CRITICAL permanent
+             regression guard, per issues/CRITICAL-array-reallocated-every-loop-iteration.md -
+             found during a from-scratch adversarial review of the frozen RC1 baseline)", () =>
+             {
+
+Path       : D:\ur-bridge-v27-final\tests\backend\wasm\emit-wasm.test.ts
+LineNumber : 1432
+Line       :   it("the allocation sequence (global.set, advancing the bump pointer) appears
+             EXACTLY ONCE in the emitted bytecode for a while-loop-with-array-write, confirmed
+             by direct byte inspection, not merely by the observable result", async () => {
+
+Path       : D:\ur-bridge-v27-final\tests\backend\wasm\emit-wasm.test.ts
+LineNumber : 1439
+Line       :       let j = sectionStart + 1, length = 0, shift = 0, b: number;
+
+Path       : D:\ur-bridge-v27-final\tests\backend\wasm\emit-wasm.test.ts
+LineNumber : 1440
+Line       :       do { b = bytes[j]!; length |= (b & 0x7f) << shift; shift += 7; j++; } while
+             (b & 0x80);
+
+Path       : D:\ur-bridge-v27-final\tests\backend\wasm\emit-wasm.test.ts
+LineNumber : 1466
+Line       :       let j = sectionStart + 1, length = 0, shift = 0, b: number;
+
+Path       : D:\ur-bridge-v27-final\tests\backend\wasm\emit-wasm.test.ts
+LineNumber : 1467
+Line       :       do { b = bytes[j]!; length |= (b & 0x7f) << shift; shift += 7; j++; } while
+             (b & 0x80);
+
+Path       : D:\ur-bridge-v27-final\tests\backend\wasm\emit-wasm.test.ts
+LineNumber : 1472
+Line       :     if (codeBytes) for (let k = 0; k < codeBytes.length - 1; k++) if (codeBytes[k]
+             === 0x10 && codeBytes[k + 1] === 0x00) callCount++;
+
+Path       : D:\ur-bridge-v27-final\tests\backend\wasm\struct-phase2.test.ts
+LineNumber : 76
+Line       :       const fieldNames = Array.from({ length: numFields }, (_, i) =>
+             `f${i}_x${rndInt(0, 999)}`);
+
+Path       : D:\ur-bridge-v27-final\tests\backend\wasm\wasm-happy-path-audit.test.ts
+LineNumber : 31
+Line       :     expect(bytes.length).toBeGreaterThan(0);
+
+Path       : D:\ur-bridge-v27-final\tests\backend\wasm\wasm-happy-path-audit.test.ts
+LineNumber : 36
+Line       :     expect(bytes.length).toBeGreaterThan(0);
+
+Path       : D:\ur-bridge-v27-final\tests\backend\wasm\wasm1002-fixture.test.ts
+LineNumber : 55
+Line       :     expect(bytes.length).toBeGreaterThan(0);
+
+Path       : D:\ur-bridge-v27-final\tests\cli\build-tsx-independence.test.ts
+LineNumber : 71
+Line       :     expect(info.contentHash.length).toBeGreaterThan(0);
+
+Path       : D:\ur-bridge-v27-final\tests\codegen\golden\16-array-literal-read\expected.c
+LineNumber : 14
+Line       :   int64_t* slot_arr = (int64_t*)ur_gc_alloc_array(3, UR_GC_ELEMENT_SCALAR);
+
+Path       : D:\ur-bridge-v27-final\tests\codegen\golden\17-array-write\expected.c
+LineNumber : 14
+Line       :   int64_t* slot_arr = (int64_t*)ur_gc_alloc_array(3, UR_GC_ELEMENT_SCALAR);
+
+Path       : D:\ur-bridge-v27-final\tests\codegen\golden\18-array-while\expected.c
+LineNumber : 14
+Line       :   int64_t* slot_arr = (int64_t*)ur_gc_alloc_array(5, UR_GC_ELEMENT_SCALAR);
+
+Path       : D:\ur-bridge-v27-final\tests\codegen\golden\19-array-if\expected.c
+LineNumber : 14
+Line       :   int64_t* slot_arr = (int64_t*)ur_gc_alloc_array(3, UR_GC_ELEMENT_SCALAR);
+
+Path       : D:\ur-bridge-v27-final\tests\codegen\golden\golden.test.ts
+LineNumber : 40
+Line       :   expect(caseDirs.length, "golden test cases must exist — the directory should not
+             be empty").toBeGreaterThan(0);
+
+Path       : D:\ur-bridge-v27-final\tests\codegen\golden\golden.test.ts
+LineNumber : 101
+Line       :       expect(lexErrors).toHaveLength(0);
+
+Path       : D:\ur-bridge-v27-final\tests\codegen\golden\golden.test.ts
+LineNumber : 103
+Line       :       expect(parseErrors).toHaveLength(0);
+
+Path       : D:\ur-bridge-v27-final\tests\codegen\golden\golden.test.ts
+LineNumber : 105
+Line       :       expect(sem.diagnostics).toHaveLength(0);
+
+Path       : D:\ur-bridge-v27-final\tests\codegen\golden\golden.test.ts
+LineNumber : 107
+Line       :       expect(types.diagnostics).toHaveLength(0);
+
+Path       : D:\ur-bridge-v27-final\tests\compiler\codegen\lower-to-ir.test.ts
+LineNumber : 181
+Line       :     if (call?.kind === "call") expect(call.args).toHaveLength(0);
+
+Path       : D:\ur-bridge-v27-final\tests\compiler\codegen\lower-to-ir.test.ts
+LineNumber : 241
+Line       :     expect(sem.diagnostics.length).toBe(0);
+
+Path       : D:\ur-bridge-v27-final\tests\compiler\codegen\lower-to-ir.test.ts
+LineNumber : 308
+Line       :       expect(call.args).toHaveLength(0);
+
+Path       : D:\ur-bridge-v27-final\tests\compiler\codegen\lower-to-ir.test.ts
+LineNumber : 389
+Line       :     expect(fn.locals).toHaveLength(0); // "temp" never needs a slot — it's
+             branch-local
+
+Path       : D:\ur-bridge-v27-final\tests\compiler\codegen\lower-to-ir.test.ts
+LineNumber : 395
+Line       :     expect(fn.locals).toHaveLength(0); // "y" is only ever read, never reassigned
+             — no slot needed
+
+Path       : D:\ur-bridge-v27-final\tests\compiler\codegen\lower-to-ir.test.ts
+LineNumber : 401
+Line       :     expect(fn.blocks).toHaveLength(5); // entry, then(10), else-cond, then(20),
+             else(30) — both merges unreachable
+
+Path       : D:\ur-bridge-v27-final\tests\compiler\codegen\lower-to-ir.test.ts
+LineNumber : 712
+Line       :     expect(arFn.locals[0]!.length).toBe(enFn.locals[0]!.length);
+
+Path       : D:\ur-bridge-v27-final\tests\compiler\codegen\lower-to-ir.test.ts
+LineNumber : 827
+Line       :     expect(plainLoadStoreOnP).toHaveLength(0);
+
+Path       : D:\ur-bridge-v27-final\tests\compiler\codegen\native-call-hardening-edge-cases.test
+             .ts
+LineNumber : 61
+Line       :           expect(sig.symbol.length).toBeGreaterThan(0);
+
+Path       : D:\ur-bridge-v27-final\tests\compiler\codegen\native-call-hardening-edge-cases.test
+             .ts
+LineNumber : 64
+Line       :           expect(sig.cReturnType.length).toBeGreaterThan(0);
+
+Path       : D:\ur-bridge-v27-final\tests\compiler\codegen\native-call-hardening-edge-cases.test
+             .ts
+LineNumber : 215
+Line       :     expect(result.ir.externs.filter(e => e.kind === "ffi")).toHaveLength(0);
+
+Path       : D:\ur-bridge-v27-final\tests\compiler\diagnostics\adapter.test.ts
+LineNumber : 31
+Line       :     expect(semResult.diagnostics.length).toBeGreaterThan(0);
+
+Path       : D:\ur-bridge-v27-final\tests\compiler\diagnostics\adapter.test.ts
+LineNumber : 40
+Line       :     expect(typeResult.diagnostics.length).toBeGreaterThan(0);
+
+Path       : D:\ur-bridge-v27-final\tests\compiler\frontend\integration.test.ts
+LineNumber : 43
+Line       :     expect(result.diagnostics.filter(e => e.severity === "error")).toHaveLength(0);
+
+Path       : D:\ur-bridge-v27-final\tests\compiler\frontend\integration.test.ts
+LineNumber : 149
+Line       :     expect(result.diagnostics.filter(e => e.severity === "error")).toHaveLength(0);
+
+Path       : D:\ur-bridge-v27-final\tests\compiler\frontend\integration.test.ts
+LineNumber : 269
+Line       :     expect(lexErrors).toHaveLength(0);
+
+Path       : D:\ur-bridge-v27-final\tests\compiler\frontend\integration.test.ts
+LineNumber : 272
+Line       :     expect(parseErrors).toHaveLength(0);
+
+Path       : D:\ur-bridge-v27-final\tests\compiler\frontend\integration.test.ts
+LineNumber : 275
+Line       :     expect(semanticResult.diagnostics).toHaveLength(0);
+
+Path       : D:\ur-bridge-v27-final\tests\compiler\frontend\integration.test.ts
+LineNumber : 278
+Line       :     expect(typeResult.diagnostics).toHaveLength(0);
+
+Path       : D:\ur-bridge-v27-final\tests\compiler\frontend\integration.test.ts
+LineNumber : 289
+Line       :     expect(parseErrors).toHaveLength(0);
+
+Path       : D:\ur-bridge-v27-final\tests\compiler\frontend\integration.test.ts
+LineNumber : 292
+Line       :     expect(result.diagnostics).toHaveLength(0);
+
+Path       : D:\ur-bridge-v27-final\tests\compiler\frontend\integration.test.ts
+LineNumber : 299
+Line       :     expect(parseErrors).toHaveLength(0);
+
+Path       : D:\ur-bridge-v27-final\tests\compiler\frontend\integration.test.ts
+LineNumber : 302
+Line       :     expect(result.diagnostics).toHaveLength(0);
+
+Path       : D:\ur-bridge-v27-final\tests\compiler\frontend\integration.test.ts
+LineNumber : 315
+Line       :     expect(errors.length).toBeGreaterThan(0);
+
+Path       : D:\ur-bridge-v27-final\tests\compiler\frontend\integration.test.ts
+LineNumber : 326
+Line       :     expect(errors.length).toBeGreaterThan(0);
+
+Path       : D:\ur-bridge-v27-final\tests\compiler\frontend\lexer.test.ts
+LineNumber : 20
+Line       :   if (r.errors.length > 0) throw new Error(`Expected 0 errors, got:
+             ${r.errors.map(e => e.message).join("; ")}`);
+
+Path       : D:\ur-bridge-v27-final\tests\compiler\frontend\lexer.test.ts
+LineNumber : 263
+Line       :     expect(r.errors).toHaveLength(0);
+
+Path       : D:\ur-bridge-v27-final\tests\compiler\frontend\lexer.test.ts
+LineNumber : 270
+Line       :     expect(r.errors).toHaveLength(0);
+
+Path       : D:\ur-bridge-v27-final\tests\compiler\frontend\lexer.test.ts
+LineNumber : 360
+Line       :     expect(lex(arabicProgram).errors).toHaveLength(0);
+
+Path       : D:\ur-bridge-v27-final\tests\compiler\frontend\lexer.test.ts
+LineNumber : 363
+Line       :     expect(lex(englishProgram).errors).toHaveLength(0);
+
+Path       : D:\ur-bridge-v27-final\tests\compiler\frontend\lexer.test.ts
+LineNumber : 402
+Line       :     expect(lex(mixed).errors).toHaveLength(0);
+
+
+
+**********************
+Windows PowerShell transcript end
+End time: 20261024223326
+**********************

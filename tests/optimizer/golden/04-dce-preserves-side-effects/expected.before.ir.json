@@ -1,0 +1,106 @@
+{
+  "qualifiedName": "ur_04_dce_preserves_side_effects_main",
+  "sourceName": "main",
+  "params": [],
+  "returnType": "i64",
+  "blocks": [
+    {
+      "id": 0,
+      "label": "entry",
+      "instructions": [
+        {
+          "kind": "const",
+          "id": 0,
+          "type": "i64",
+          "value": {
+            "kind": "const_int",
+            "value": "5n"
+          },
+          "location": {
+            "file": "program.ur",
+            "start": {
+              "line": 2,
+              "column": 9
+            },
+            "end": {
+              "line": 2,
+              "column": 9
+            }
+          }
+        },
+        {
+          "kind": "call",
+          "id": 1,
+          "type": "void",
+          "callee": "ur_print_int",
+          "args": [
+            {
+              "id": 0
+            }
+          ],
+          "location": {
+            "file": "program.ur",
+            "start": {
+              "line": 2,
+              "column": 3
+            },
+            "end": {
+              "line": 2,
+              "column": 10
+            }
+          }
+        },
+        {
+          "kind": "const",
+          "id": 2,
+          "type": "i64",
+          "value": {
+            "kind": "const_int",
+            "value": "1n"
+          },
+          "location": {
+            "file": "program.ur",
+            "start": {
+              "line": 3,
+              "column": 10
+            },
+            "end": {
+              "line": 3,
+              "column": 10
+            }
+          }
+        }
+      ],
+      "terminator": {
+        "kind": "return",
+        "value": {
+          "id": 2
+        },
+        "location": {
+          "file": "program.ur",
+          "start": {
+            "line": 3,
+            "column": 3
+          },
+          "end": {
+            "line": 3,
+            "column": 10
+          }
+        }
+      }
+    }
+  ],
+  "entryBlock": 0,
+  "location": {
+    "file": "program.ur",
+    "start": {
+      "line": 1,
+      "column": 1
+    },
+    "end": {
+      "line": 4,
+      "column": 3
+    }
+  },
+  "locals": []
+}

@@ -1,0 +1,1502 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// UR WASM Backend — Level 3.1A.1 Tests
+// WASM_BACKEND_SPEC.md §0 (Feature Matrix), §1.2 (Diagnostic Codes), §8 (Backend Correctness)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// Per §8: WebAssembly.validate()/instantiate() succeeding is necessary
+// but NOT sufficient. Every real-execution test here also compiles the
+// SAME program through the C Backend and asserts Result A == Result B
+// — the actual success criterion this spec establishes.
+
+import { describe, it, expect } from "vitest";
+import { lex } from "../../../src/compiler/frontend/lexer.js";
+import { parse } from "../../../src/compiler/frontend/parser.js";
+import { analyze } from "../../../src/compiler/semantic/index.js";
+import { typeCheck } from "../../../src/compiler/typesystem/checker.js";
+import { lowerToIR } from "../../../src/compiler/codegen/lower-to-ir.js";
+import { emitWasmModule, emitWasm } from "../../../src/backend/wasm/emit-wasm.js";
+import { WasmUnsupportedError, WASM_CODES } from "../../../src/backend/wasm/wasm-diagnostics.js";
+import { emitC } from "../../../src/backend/c/emit-c.js";
+import { compileC, runExecutable, cleanupExecutable } from "../../../tools/backend/c-compile.js";
+import { execSync } from "node:child_process";
+import type { IRModule } from "../../../src/shared/ir.js";
+import { runOnCBackend, runOnWasmBackend, makeHostStub } from "../../../tools/backend/differential-runner.js";
+
+// RB3-TEST-REALIGNMENT - DR-RB3-01 (Option A, APPROVED by PM): the constructs below were ratified as the
+// V1.0 WASM contract. A former rejection assertion is realigned to "ACCEPTED *and* the same result as the
+// C backend" (never merely "not rejected"). Constructs still out of scope (allocation inside a loop body,
+// floats) keep their rejection tests unchanged.
+async function expectAcceptedAndEqualToC(src: string): Promise<void> {
+  const module = compileToModule(src);
+  expect(() => emitWasmModule(module)).not.toThrow();
+  const wasm = await runOnWasmBackend(module, makeHostStub());
+  expect(wasm.firstFailedPhase).toBeNull();
+  const c = runOnCBackend(module);
+  expect(c.firstFailedPhase).toBeNull();
+  const w = wasm.observed as { returnValue: number | bigint; printedInts: (number | bigint)[] };
+  const cObs = c.observed as { exitCode: number; stdout: string };
+  // RB3-WIN G6 (PM-authorized, test/oracle only): compare under the PLATFORM's process exit-code width.
+  // POSIX keeps the original 8-bit rule (value % 256). Windows reports the full 32-bit exit code, so the
+  // WASM value is reduced to unsigned 32 bits. Raw values are carried in the message for auditability.
+  const raw = BigInt(w.returnValue);
+  const expectedExit = process.platform === "win32"
+    ? Number(BigInt.asUintN(32, raw))
+    : ((Number(w.returnValue) % 256) + 256) % 256;
+  expect(expectedExit, `raw WASM value=${raw} | C exit=${cObs.exitCode} | platform=${process.platform} | width=${process.platform === "win32" ? 32 : 8}`).toBe(cObs.exitCode);
+  const cPrinted = cObs.stdout.trim().split("\n").filter(l => l.length > 0);
+  expect(w.printedInts.map(v => String(v))).toEqual(cPrinted);
+}
+
+function gccAvailable(): boolean {
+  try { execSync("gcc --version", { stdio: "ignore" }); return true; } catch { return false; }
+}
+const hasGcc = gccAvailable();
+
+function compileToModule(src: string): IRModule {
+  const { tokens } = lex(src);
+  const { program, errors } = parse(tokens);
+  if (errors.length) throw new Error(`parse errors: ${JSON.stringify(errors)}`);
+  const sem = analyze(program);
+  if (sem.diagnostics.length) throw new Error(`semantic errors: ${JSON.stringify(sem.diagnostics)}`);
+  const types = typeCheck(program);
+  if (types.diagnostics.length) throw new Error(`type errors: ${JSON.stringify(types.diagnostics)}`);
+  const ir = lowerToIR(program, "t.ur", "t");
+  if (!ir.ok) throw new Error(`lowering failed: ${JSON.stringify(ir.diagnostics)}`);
+  return ir.value;
+}
+
+/** Runs a UR program through BOTH backends and asserts identical results — WASM_BACKEND_SPEC.md section 8's Backend Correctness principle, the actual test methodology, not merely validate()/instantiate() succeeding in isolation. Only valid for expected values within the OS exit-code range (0-255) - for anything outside that range, use assertWasmResult() instead (see the CONFIRMED BUG note in the 3.1A.1 batch: exit codes are truncated mod 256 by the OS itself, making this comparison meaningless outside that range). */
+async function assertBackendCorrectness(src: string, expected: bigint) {
+  const module = compileToModule(src);
+
+  const wasmBytes = emitWasmModule(module);
+  expect(WebAssembly.validate(wasmBytes)).toBe(true);
+  const { instance } = await WebAssembly.instantiate(wasmBytes);
+  const wasmResult = (instance.exports.main as () => bigint)();
+  expect(wasmResult).toBe(expected);
+
+  if (hasGcc) {
+    const cCompiled = compileC(emitC(module), "a.out", { captureWarnings: true });
+    expect(cCompiled.ok).toBe(true);
+    if (cCompiled.ok) {
+      const cResult = runExecutable(cCompiled.value);
+      cleanupExecutable(cCompiled.value);
+      // Backend Correctness: Result A (C) == Result B (WASM).
+      expect(BigInt(cResult.exitCode)).toBe(wasmResult);
+    }
+  }
+}
+
+/** For expected values OUTSIDE the OS exit-code range (0-255): verifies WASM's result against an independently-known-correct value directly, WITHOUT comparing against C's exit code (which the 3.1A.1 batch confirmed is truncated mod 256 by the OS, making that specific comparison meaningless for such values - this is not a WASM Backend limitation, it is a limitation of exit codes as an observation channel). */
+async function assertWasmResult(src: string, expected: bigint) {
+  const module = compileToModule(src);
+  const wasmBytes = emitWasmModule(module);
+  expect(WebAssembly.validate(wasmBytes)).toBe(true);
+  const { instance } = await WebAssembly.instantiate(wasmBytes);
+  const wasmResult = (instance.exports.main as () => bigint)();
+  expect(wasmResult).toBe(expected);
+}
+
+describe("WASM Backend 3.1A.1 — Backend Correctness (WASM_BACKEND_SPEC.md section 8)", () => {
+  it("REVIEWER'S EXACT EXAMPLE: fn main() -> int { return 42; } — real validate, real execute, matches C Backend", async () => {
+    await assertBackendCorrectness("function main(): int\n  return 42\nend\n", 42n);
+  });
+
+  it("return 0", async () => {
+    await assertBackendCorrectness("function main(): int\n  return 0\nend\n", 0n);
+  });
+
+  it("return a large constant (beyond 32-bit range, confirming i64 not i32 is used) - tested on the WASM side directly, since comparing against C's OS exit code is not meaningful for values outside the 0-255 range an exit code can represent", async () => {
+    const module = compileToModule("function main(): int\n  return 9000000000\nend\n");
+    const wasmBytes = emitWasmModule(module);
+    expect(WebAssembly.validate(wasmBytes)).toBe(true);
+    const { instance } = await WebAssembly.instantiate(wasmBytes);
+    const result = (instance.exports.main as () => bigint)();
+    expect(result).toBe(9000000000n);
+  });
+
+  it("a non-slot-based 'let' binding that resolves to a single const (Lowering's environment rebinding, matching IR_COPY_PRESENCE_AUDIT.md's finding) is correctly WITHIN 3.1A.1 scope, not rejected", async () => {
+    await assertBackendCorrectness("function main(): int\n  let x = 5\n  return x\nend\n", 5n);
+  });
+});
+
+describe("WASM Backend 3.1A.1 — signed LEB128 encoding correctness (tested directly, since UR source syntax cannot express a negative const_int - unary minus always lowers to a separate unop instruction, itself out of 3.1A.1's scope)", () => {
+  it("encodeSLEB128 round-trips negative values correctly (verified via WebAssembly.validate on a hand-built module using the encoder directly)", async () => {
+    const { encodeSLEB128, concatBytes, withLength, encodeVector } = await import("../../../src/backend/wasm/leb128.js");
+    // Hand-build a minimal module: () -> i64, body = i64.const -17; return; end.
+    const typeSection = concatBytes(1, withLength(encodeVector([concatBytes(0x60, encodeVector([]), encodeVector([new Uint8Array([0x7e])]))])));
+    const funcSection = concatBytes(3, withLength(encodeVector([new Uint8Array([0x00])])));
+    const nameBytes = new TextEncoder().encode("main");
+    const exportEntry = concatBytes(nameBytes.length, nameBytes, 0x00, 0x00);
+    const exportSection = concatBytes(7, withLength(encodeVector([exportEntry])));
+    const body = withLength(concatBytes(encodeVector([]), 0x42, encodeSLEB128(-17n), 0x0f, 0x0b));
+    const codeSection = concatBytes(10, withLength(encodeVector([body])));
+    const module = concatBytes(
+      new Uint8Array([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00]),
+      typeSection, funcSection, exportSection, codeSection,
+    );
+    expect(WebAssembly.validate(module)).toBe(true);
+    const { instance } = await WebAssembly.instantiate(module);
+    expect((instance.exports.main as () => bigint)()).toBe(-17n);
+  });
+});
+
+describe("WASM Backend 3.1A.1 — emitted binary structure", () => {
+  it("the emitted module is well-formed per WebAssembly.validate() (structural sanity, necessary but not sufficient per section 8)", () => {
+    const module = compileToModule("function main(): int\n  return 1\nend\n");
+    const bytes = emitWasmModule(module);
+    expect(WebAssembly.validate(bytes)).toBe(true);
+  });
+
+  it("the module starts with the correct WASM magic number and version", () => {
+    const module = compileToModule("function main(): int\n  return 1\nend\n");
+    const bytes = emitWasmModule(module);
+    expect([...bytes.slice(0, 8)]).toEqual([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00]);
+  });
+
+  it("emitWasm() supports a custom export name", async () => {
+    const module = compileToModule("function main(): int\n  return 7\nend\n");
+    const bytes = emitWasm(module.functions[0]!, "customExport");
+    expect(WebAssembly.validate(bytes)).toBe(true);
+    const { instance } = await WebAssembly.instantiate(bytes);
+    expect((instance.exports.customExport as () => bigint)()).toBe(7n);
+  });
+});
+
+describe("WASM Backend 3.1A.1 — ratified rejections (WASM1001/WASM1002), never silently miscompiled", () => {
+  function expectRejection(src: string, expectedCode: string) {
+    const module = compileToModule(src);
+    let caught: WasmUnsupportedError | undefined;
+    try {
+      emitWasmModule(module);
+    } catch (e) {
+      caught = e as WasmUnsupportedError;
+    }
+    expect(caught).toBeDefined();
+    expect(caught?.diagnostic.code).toBe(expectedCode);
+  }
+
+  it("[DR-RB3-01] unary minus (unop) is ACCEPTED and equals the C backend (formerly: rejected with WASM1001)", async () => {
+    await expectAcceptedAndEqualToC("function main(): int\n  return -(2)\nend\n");
+  });
+
+  // NOTE: "a while loop is rejected" was removed here — plain while
+  // (no break/continue) is now legitimately supported per 3.1A.6. See
+  // the while-with-break test above (still genuinely rejected, per
+  // 3.1A.6's scope narrowing) and the dedicated 3.1A.6 test blocks
+  // below for the plain while shape's own Backend Correctness tests.
+
+  it("NESTED WHILE is rejected with WASM1002 - break and continue are both now legitimately supported (3.1A.6b/3.1A.6c), so this uses the genuinely still-rejected nested-loop shape", () => {
+    expectRejection("function main(): int\n  let i = 0\n  let total = 0\n  while i < 3\n    let j = 0\n    while j < 3\n      total = total + 1\n      j = j + 1\n    end\n    i = i + 1\n  end\n  return total\nend\n", WASM_CODES.UNSUPPORTED_CFG_SHAPE);
+  });
+
+  it("NOTE (was REJECTS, now ACCEPTS as of the function-parameters design): a function with primitive-typed parameters is now legitimately supported. Struct-typed parameters remain rejected (a later, separate phase) - see the dedicated function-parameters test blocks below.", () => {
+    const module = compileToModule("function main(x: int): int\n  return x\nend\n");
+    expect(() => emitWasmModule(module)).not.toThrow();
+  });
+
+  // NOTE: "a multi-function module is rejected" was removed here —
+  // function calls (and therefore multi-function modules) are now
+  // legitimately supported as of 3.1A.3. See the dedicated 3.1A.3
+  // test blocks below for calls, call chains, and recursion rejection.
+
+  it("NOTE (was REJECTS, now ACCEPTS as of Level 3.1B.1): array construction and constant-index read - this is now legitimately supported. See the dedicated 3.1B.1 test blocks below for Backend Correctness and permanent regression contracts.", () => {
+    const module = compileToModule("function main(): int\n  let arr = [1,2,3]\n  return arr[0]\nend\n");
+    expect(() => emitWasmModule(module)).not.toThrow();
+  });
+
+  it("NOTE (was REJECTS, now ACCEPTS as of Struct Phase 1): local struct construction, field read, and field write - this is now legitimately supported for straight-line functions. See WASM_BUMP_ALLOCATOR_STUDY.md/WASM_STRUCT_DESIGN.md for the full design; struct-typed parameters/returns/imports remain rejected (a later phase).", () => {
+    const module = compileToModule("struct Point\n  x: int\n  y: int\nend\nfunction main(): int\n  let p = Point(1, 2)\n  return p.x\nend\n");
+    expect(() => emitWasmModule(module)).not.toThrow();
+  });
+
+  it("P1-3C update (supersedes the pre-3.1C assertion below): print(int) is now a supported WASM Import Section capability (see P1-3C Discovery/Design + Implementation Gates) - a call to print() with an int argument must NOT be rejected. The original assertion here (that ANY print() call is rejected via WASM1004) is preserved in spirit, not silently deleted: it is split into this positive case plus the still-rejected negative case immediately below, so the test continues to prove 'known supported extern -> accepted, unknown/unsupported extern -> WASM1004' rather than merely going silent on a stale expectation.", () => {
+    const module = compileToModule("function main(): int\n  print(5)\n  return 1\nend\n");
+    expect(() => emitWasmModule(module)).not.toThrow();
+  });
+
+  it("[DR-RB3-01 AMENDED] the host builtins input()/free() are ACCEPTED on WASM and equal the C backend (formerly a P1-3C negative control expecting rejection; the implementation, differential fixture 34 and this test show they are imported and work)", async () => {
+    await expectAcceptedAndEqualToC("function main(): int\n  free(input())\n  return 1\nend\n");
+  });
+
+  it("the rejection error message identifies the specific offending function (using a still-rejected example, since '2 + 3' is now legitimately supported by 3.1A.2)", () => {
+    const module = compileToModule("function main(): bool\n  return 2 == 3\nend\n");
+    let caught: WasmUnsupportedError | undefined;
+    try {
+      emitWasmModule(module);
+    } catch (e) {
+      caught = e as WasmUnsupportedError;
+    }
+    expect(caught?.diagnostic.functionName).toBe("main");
+  });
+});
+
+describe("WASM Backend 3.1A.2 — Integer Arithmetic (add/sub/mul), Backend Correctness", () => {
+  it("2 + 3 = 5", async () => {
+    await assertBackendCorrectness("function main(): int\n  return 2 + 3\nend\n", 5n);
+  });
+
+  it("10 - 4 = 6", async () => {
+    await assertBackendCorrectness("function main(): int\n  return 10 - 4\nend\n", 6n);
+  });
+
+  it("6 * 7 = 42", async () => {
+    await assertBackendCorrectness("function main(): int\n  return 6 * 7\nend\n", 42n);
+  });
+
+  it("BOUNDARY: 0 + 0 = 0", async () => {
+    await assertBackendCorrectness("function main(): int\n  return 0 + 0\nend\n", 0n);
+  });
+
+  it("BOUNDARY: 1 * 1 = 1", async () => {
+    await assertBackendCorrectness("function main(): int\n  return 1 * 1\nend\n", 1n);
+  });
+
+  it("BOUNDARY: subtraction producing exactly zero (5 - 5 = 0)", async () => {
+    await assertBackendCorrectness("function main(): int\n  return 5 - 5\nend\n", 0n);
+  });
+
+  it("BOUNDARY: a long chain of additions (10 terms) - confirms deep expression-tree recursion works, not just 2-operand cases", async () => {
+    await assertBackendCorrectness("function main(): int\n  return (((((((((1 + 2) + 3) + 4) + 5) + 6) + 7) + 8) + 9) + 10)\nend\n", 55n);
+  });
+
+  it("BOUNDARY: a large value beyond the OS exit-code range (0-255) - verified on the WASM side directly, per the 3.1A.1 batch's confirmed exit-code truncation limitation, not a WASM Backend bug", async () => {
+    // 2*2*2*...*2 (10 times) = 1024, which is > 255 and would be
+    // truncated to 0 by the OS exit-code channel (1024 mod 256 = 0) -
+    // confirmed mathematically exact during this batch's own testing.
+    await assertWasmResult("function main(): int\n  return 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2\nend\n", 1024n);
+  });
+
+  it("BOUNDARY: a very large i64 value (beyond 32-bit range) - verified on the WASM side directly", async () => {
+    await assertWasmResult("function main(): int\n  return 1000000000000 + 1\nend\n", 1000000000001n);
+  });
+
+  it("mixed add/sub/mul in one expression tree", async () => {
+    await assertBackendCorrectness("function main(): int\n  return (2 + 3) * (10 - 6)\nend\n", 20n);
+  });
+});
+
+describe("WASM Backend 3.1A.2 — ratified rejections: still out of scope this batch", () => {
+  function expectRejection(src: string) {
+    const module = compileToModule(src);
+    expect(() => emitWasmModule(module)).toThrow(WasmUnsupportedError);
+  }
+
+  it("division is still rejected - CONFIRMED FINDING: UR's '/' operator always produces Float (there is no integer-division operator in the language), so this necessarily exercises the float rejection path (deferred to a later sub-phase) rather than a div-specific one - the two are inseparable at this phase given UR's actual semantics", () => {
+    expectRejection("function main(): float\n  return 10.0 / 2.0\nend\n");
+  });
+
+  it("modulo is still rejected (UR's '%' does operate on integers, so this DOES exercise a div-specific rejection independent of float support)", () => {
+    expectRejection("function main(): int\n  return 10 % 3\nend\n");
+  });
+
+  it("comparison (eq) is still rejected - explicitly NOT introduced in this batch, per review", () => {
+    expectRejection("function main(): bool\n  return 2 == 2\nend\n");
+  });
+
+  it("boolean '&&'/'||' are still rejected", () => {
+    expectRejection("function main(): bool\n  return true && false\nend\n");
+  });
+
+  it("[DR-RB3-01] REUSING a value ('let a = 2+3; return a + a') is ACCEPTED and equals C (formerly rejected pending 3.1A.6, which has landed)", async () => {
+    await expectAcceptedAndEqualToC("function main(): int\n  let a = 2 + 3\n  return a + a\nend\n");
+  });
+
+  it("[DR-RB3-01] value reuse no longer produces the 3.1A.6 Expression Tree Property rejection: it compiles and equals C", async () => {
+    const module = compileToModule("function main(): int\n  let a = 2 + 3\n  return a + a\nend\n");
+    let caught: WasmUnsupportedError | undefined;
+    try { emitWasmModule(module); } catch (e) { caught = e as WasmUnsupportedError; }
+    expect(caught).toBeUndefined();
+    await expectAcceptedAndEqualToC("function main(): int\n  let a = 2 + 3\n  return a + a\nend\n");
+  });
+
+  // NOTE: "if/else is rejected" was removed here — return-only if/else
+  // with a comparison condition is now legitimately supported per
+  // 3.1A.4 (Invariant 3.1A.4). See the dedicated 3.1A.4 test blocks
+  // below for the Diamond CFG shape and its precise rejection boundary
+  // (merge blocks, nested if, while — all still rejected).
+});
+
+describe("WASM Backend 3.1A.2 - CONTRACT: Expression Tree Property (WASM_BACKEND_SPEC.md section 2.1), permanent regression guard", () => {
+  // Per explicit review: the boundary must be a precise, checkable
+  // mathematical property (fan-out <= 1 per SSA value, i.e. the
+  // def-use graph is a TREE, never a DAG) - not merely "reuse looks
+  // wrong". This block is the permanent contract: if a future change
+  // to Lowering or this emitter ever allows a DAG-shaped function
+  // through, this test fails immediately.
+
+  function accepts(src: string): boolean {
+    const module = compileToModule(src);
+    try {
+      emitWasmModule(module);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  it("TREE expression (every value has fan-out <= 1): ACCEPTED - (2+3)*(10-6), a genuine tree with no shared subexpression", () => {
+    expect(accepts("function main(): int\n  return (2 + 3) * (10 - 6)\nend\n")).toBe(true);
+  });
+
+  it("TREE expression: ACCEPTED - a deep chain, each intermediate result feeding exactly the next operation once", () => {
+    expect(accepts("function main(): int\n  return ((((1 + 2) + 3) + 4) + 5)\nend\n")).toBe(true);
+  });
+
+  it("TREE expression: ACCEPTED - two SEPARATE constants each used once is fine (no shared node)", () => {
+    expect(accepts("function main(): int\n  return 2 + 3\nend\n")).toBe(true);
+  });
+
+  it("[DR-RB3-01] DAG expression with fan-out 2 is ACCEPTED and equals C (formerly REJECTED by the 3.1A.2 Expression Tree Property)", async () => {
+    await expectAcceptedAndEqualToC("function main(): int\n  let a = 2 + 3\n  return a + a\nend\n");
+  });
+
+  it("[DR-RB3-01] DAG expression with fan-out 3 is ACCEPTED and equals C (formerly REJECTED)", async () => {
+    await expectAcceptedAndEqualToC("function main(): int\n  let a = 2 + 3\n  let b = a + a\n  return b + a\nend\n");
+  });
+
+  it("[DR-RB3-01] constant reused via a variable is ACCEPTED and equals C (formerly REJECTED)", async () => {
+    await expectAcceptedAndEqualToC("function main(): int\n  let x = 5\n  return x + x\nend\n");
+  });
+
+  it("[DR-RB3-01] a 3-use DAG no longer produces a fan-out rejection: it compiles and equals C", async () => {
+    const module = compileToModule("function main(): int\n  let a = 2 + 3\n  let b = a + a\n  return b + a\nend\n");
+    let caught: WasmUnsupportedError | undefined;
+    try { emitWasmModule(module); } catch (e) { caught = e as WasmUnsupportedError; }
+    expect(caught).toBeUndefined();
+    await expectAcceptedAndEqualToC("function main(): int\n  let a = 2 + 3\n  let b = a + a\n  return b + a\nend\n");
+  });
+});
+
+describe("WASM Backend - MIGRATION TEST (WASM_BACKEND_SPEC.md section 2.2): Expression Tree Property is a TEMPORARY 3.1A constraint, not permanent", () => {
+  // ─────────────────────────────────────────────────────────────────
+  // WHEN 3.1A.6 (Local Variables) IS IMPLEMENTED, THIS TEST'S
+  // ASSERTION MUST BE INVERTED: `accepts(...)` below must become
+  // `true` (using a WASM local internally to hold the shared value),
+  // not merely left as `false` alongside new local-variable support
+  // elsewhere. This test exists specifically so that inversion is
+  // never forgotten - per WASM_BACKEND_SPEC.md section 2.1's explicit
+  // "TEMPORARY PHASE CONSTRAINT" note.
+  // ─────────────────────────────────────────────────────────────────
+
+  function accepts(src: string): boolean {
+    const module = compileToModule(src);
+    try {
+      emitWasmModule(module);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  it("[DR-RB3-01] FLIPPED as this test's own TODO(3.1A.6) required: 'let a = 2+3; return a+a' is ACCEPTED, with the real A-vs-C check (5 + 5 = 10)", async () => {
+    await expectAcceptedAndEqualToC("function main(): int\n  let a = 2 + 3\n  return a + a\nend\n");
+  });
+});
+
+describe("WASM Backend 3.1A.3 — Function Calls (direct, intra-module, zero-argument, non-recursive), Backend Correctness", () => {
+  it("main() calling f(): real execution matches C Backend", async () => {
+    await assertBackendCorrectness("function f(): int\n  return 42\nend\nfunction main(): int\n  return f()\nend\n", 42n);
+  });
+
+  it("a call chain: main() -> f() -> g(): real execution matches C Backend", async () => {
+    await assertBackendCorrectness(
+      "function g(): int\n  return 10\nend\nfunction f(): int\n  return g()\nend\nfunction main(): int\n  return f()\nend\n",
+      10n,
+    );
+  });
+
+  it("a call result used inside an arithmetic expression tree (still fan-out <= 1): matches C Backend", async () => {
+    await assertBackendCorrectness(
+      "function f(): int\n  return 10\nend\nfunction main(): int\n  return f() + 5\nend\n",
+      15n,
+    );
+  });
+
+  it("multiple independent calls, each used exactly once (a valid tree, not a DAG): matches C Backend", async () => {
+    await assertBackendCorrectness(
+      "function f(): int\n  return 3\nend\nfunction g(): int\n  return 4\nend\nfunction main(): int\n  return f() + g()\nend\n",
+      7n,
+    );
+  });
+});
+
+describe("WASM Backend 3.1A.3 — ratified rejections: recursion and unresolved calls, per explicit review's strict boundaries", () => {
+  it("DIRECT self-recursion (a zero-parameter function calling itself) is rejected with WASM1002, not silently accepted or miscompiled", () => {
+    const module = compileToModule("function loop(): int\n  return loop()\nend\nfunction main(): int\n  return loop()\nend\n");
+    let caught: WasmUnsupportedError | undefined;
+    try {
+      emitWasmModule(module);
+    } catch (e) {
+      caught = e as WasmUnsupportedError;
+    }
+    expect(caught?.diagnostic.code).toBe(WASM_CODES.UNSUPPORTED_CFG_SHAPE);
+    expect(caught !== undefined && caught.message.includes("recursion detected")).toBe(true);
+  });
+
+  it("MUTUAL recursion (a() calls b(), b() calls a()) is rejected with WASM1002 - the cycle detector catches indirect cycles too, not just direct self-calls", () => {
+    const module = compileToModule("function a(): int\n  return b()\nend\nfunction b(): int\n  return a()\nend\nfunction main(): int\n  return a()\nend\n");
+    let caught: WasmUnsupportedError | undefined;
+    try {
+      emitWasmModule(module);
+    } catch (e) {
+      caught = e as WasmUnsupportedError;
+    }
+    expect(caught?.diagnostic.code).toBe(WASM_CODES.UNSUPPORTED_CFG_SHAPE);
+    expect(caught !== undefined && caught.message.includes("recursion detected")).toBe(true);
+  });
+
+  it("NOTE (was REJECTS, now ACCEPTS as of the function-parameters design): a call to a function with real, primitive-typed arguments now succeeds - real WASM generation confirmed", () => {
+    const module = compileToModule("function f(x: int): int\n  return x + 1\nend\nfunction main(): int\n  return f(5)\nend\n");
+    expect(() => emitWasmModule(module)).not.toThrow();
+  });
+
+  it("a call to a function NOT defined anywhere in the module is rejected with WASM1004, not an internal exception - constructed manually since valid UR source can never produce this (Semantic already resolves every call), but the emitter itself must still handle it cleanly", () => {
+    const loc = { file: "t", start: { line: 1, column: 1 }, end: { line: 1, column: 1 } };
+    const moduleWithBadCall = {
+      moduleName: "m", externs: [],
+      functions: [{
+        qualifiedName: "ur_m_main", sourceName: "main", params: [], returnType: "i64" as const, entryBlock: 0, location: loc,
+        locals: [],
+        blocks: [{
+          id: 0, label: "entry",
+          instructions: [{ kind: "call" as const, id: 0, type: "i64" as const, callee: "does_not_exist", args: [], location: loc }],
+          terminator: { kind: "return" as const, value: { id: 0 }, location: loc },
+        }],
+      }],
+    };
+    let caught: WasmUnsupportedError | undefined;
+    let threwSomethingElse = false;
+    try {
+      emitWasmModule(moduleWithBadCall);
+    } catch (e) {
+      if (e instanceof WasmUnsupportedError) caught = e; else threwSomethingElse = true;
+    }
+    expect(threwSomethingElse).toBe(false);
+    expect(caught?.diagnostic.code).toBe(WASM_CODES.UNSUPPORTED_RUNTIME_FEATURE);
+  });
+});
+
+describe("WASM Backend 3.1A.3 - function DECLARATION ORDER independence (per explicit review request)", () => {
+  // Confirms functionIndexByName resolves calls correctly regardless
+  // of the order functions appear in the module - the WASM function
+  // index assigned to each function is consistent with wherever it
+  // sits in module.functions, and every reference (Function section,
+  // Export section, call-target resolution) uses that SAME array
+  // consistently, so no ordering assumption can silently break this.
+
+  const F = "function f(): int\n  return 5\nend\n";
+  const G = "function g(): int\n  return f()\nend\n";
+  const M = "function main(): int\n  return g()\nend\n";
+
+  it("order: main, f, g", async () => {
+    await assertBackendCorrectness(M + F + G, 5n);
+  });
+
+  it("order: g, main, f", async () => {
+    await assertBackendCorrectness(G + M + F, 5n);
+  });
+
+  it("order: f, g, main", async () => {
+    await assertBackendCorrectness(F + G + M, 5n);
+  });
+});
+
+describe("WASM Backend 3.1A.4 - if/else (Invariant 3.1A.4), Backend Correctness", () => {
+  it("REVIEWER'S EXACT EXAMPLE: if (true branch) return 10 else return 20 end - matches C Backend", async () => {
+    await assertBackendCorrectness("function main(): int\n  if 1 == 1\n    return 10\n  else\n    return 20\n  end\nend\n", 10n);
+  });
+
+  it("the false branch: matches C Backend", async () => {
+    await assertBackendCorrectness("function main(): int\n  if 1 == 2\n    return 10\n  else\n    return 20\n  end\nend\n", 20n);
+  });
+
+  it("every comparison operator, each tested true and false: eq, neq, lt, lte, gt, gte", async () => {
+    await assertBackendCorrectness("function main(): int\n  if 5 == 5\n    return 1\n  else\n    return 0\n  end\nend\n", 1n);
+    await assertBackendCorrectness("function main(): int\n  if 5 != 6\n    return 1\n  else\n    return 0\n  end\nend\n", 1n);
+    await assertBackendCorrectness("function main(): int\n  if 3 < 5\n    return 1\n  else\n    return 0\n  end\nend\n", 1n);
+    await assertBackendCorrectness("function main(): int\n  if 5 <= 5\n    return 1\n  else\n    return 0\n  end\nend\n", 1n);
+    await assertBackendCorrectness("function main(): int\n  if 5 > 3\n    return 1\n  else\n    return 0\n  end\nend\n", 1n);
+    await assertBackendCorrectness("function main(): int\n  if 5 >= 5\n    return 1\n  else\n    return 0\n  end\nend\n", 1n);
+  });
+
+  it("the condition itself is an arithmetic expression tree: (2+3) == 5", async () => {
+    await assertBackendCorrectness("function main(): int\n  if (2 + 3) == 5\n    return 1\n  else\n    return 0\n  end\nend\n", 1n);
+  });
+
+  it("each branch contains its own arithmetic expression tree", async () => {
+    await assertBackendCorrectness("function main(): int\n  if 1 == 1\n    return 2 + 3\n  else\n    return 10 - 4\n  end\nend\n", 5n);
+  });
+
+  it("each branch contains a function call", async () => {
+    await assertBackendCorrectness(
+      "function f(): int\n  return 42\nend\nfunction main(): int\n  if 1 == 1\n    return f()\n  else\n    return 0\n  end\nend\n",
+      42n,
+    );
+  });
+});
+
+describe("WASM Backend - IF_RETURN_ONLY_CONTRACT (permanent regression guard, per explicit review request)", () => {
+  // Per explicit review: this contract must survive indefinitely,
+  // exactly like the Expression Tree Property contract. If a future
+  // change ever allows a merge-crossing if/else through without
+  // Local Variables actually being implemented, this fails immediately.
+
+  function accepts(src: string): boolean {
+    const module = compileToModule(src);
+    try {
+      emitWasmModule(module);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  it("ACCEPTS: if (...) { return 10 } else { return 20 } - both branches terminate via return, no merge block", () => {
+    expect(accepts("function main(): int\n  if 1 == 1\n    return 10\n  else\n    return 20\n  end\nend\n")).toBe(true);
+  });
+
+  it("NOTE (was REJECTS, now ACCEPTS as of 3.1A.5): let x=0; if (...) { x=10 } else { x=20 }; return x - this exact case is NOT rejected by Invariant 3.1A.4 in isolation; it is legitimately accepted under the SEPARATE Invariant 3.1A.5 (Diamond+Merge with Local Variables). See the dedicated IF_MERGE_ONLY_CONTRACT block below for 3.1A.5's own permanent regression guard.", () => {
+    expect(accepts("function main(): int\n  let x = 0\n  if 1 == 1\n    x = 10\n  else\n    x = 20\n  end\n  return x\nend\n")).toBe(true);
+  });
+
+  it("NOTE (was REJECTS, now ACCEPTS as of WASM Layer 2 - a deliberate spec change, not an implementation bug): nested if (an if inside an if branch, every path returning directly) - now correctly compiles and, confirmed live via real WebAssembly execution in layer2-nested-if-execution.test.ts, runs correctly.", () => {
+    expect(accepts("function main(): int\n  if 1 == 1\n    if 2 == 2\n      return 1\n    else\n      return 2\n    end\n  else\n    return 3\n  end\nend\n")).toBe(true);
+  });
+
+  it("REJECTS: NESTED WHILE (break and continue are both now legitimately supported per 3.1A.6b/3.1A.6c, so this tests the genuinely still-rejected nested-loop shape)", () => {
+    expect(accepts("function main(): int\n  let i = 0\n  let total = 0\n  while i < 3\n    let j = 0\n    while j < 3\n      total = total + 1\n      j = j + 1\n    end\n    i = i + 1\n  end\n  return total\nend\n")).toBe(false);
+  });
+
+  it("REJECTS: a raw boolean literal as the condition (not a comparison) - 'if true' has no comparison to produce the i32 condition WASM needs", () => {
+    expect(accepts("function main(): int\n  if true\n    return 1\n  else\n    return 2\n  end\nend\n")).toBe(false);
+  });
+});
+
+describe("WASM Backend 3.1A.5 - Local Variables + Diamond/Merge (Invariant 3.1A.5), Backend Correctness", () => {
+  it("REVIEWER'S EXACT EXAMPLE: let x=0; if(...) x=10 else x=20; return x - matches C Backend", async () => {
+    await assertBackendCorrectness("function main(): int\n  let x = 0\n  if 1 == 1\n    x = 10\n  else\n    x = 20\n  end\n  return x\nend\n", 10n);
+  });
+
+  it("the false branch: matches C Backend", async () => {
+    await assertBackendCorrectness("function main(): int\n  let x = 0\n  if 1 == 2\n    x = 10\n  else\n    x = 20\n  end\n  return x\nend\n", 20n);
+  });
+
+  it("each branch assigns the result of an arithmetic expression tree", async () => {
+    await assertBackendCorrectness("function main(): int\n  let x = 0\n  if 1 == 1\n    x = 2 + 3\n  else\n    x = 10 - 4\n  end\n  return x\nend\n", 5n);
+  });
+
+  it("each branch assigns the result of a function call", async () => {
+    await assertBackendCorrectness(
+      "function f(): int\n  return 42\nend\nfunction main(): int\n  let x = 0\n  if 1 == 1\n    x = f()\n  else\n    x = 0\n  end\n  return x\nend\n",
+      42n,
+    );
+  });
+
+  it("every comparison operator drives the merge correctly: eq, neq, lt, lte, gt, gte", async () => {
+    await assertBackendCorrectness("function main(): int\n  let x = 0\n  if 5 == 5\n    x = 1\n  else\n    x = 0\n  end\n  return x\nend\n", 1n);
+    await assertBackendCorrectness("function main(): int\n  let x = 0\n  if 5 != 6\n    x = 1\n  else\n    x = 0\n  end\n  return x\nend\n", 1n);
+    await assertBackendCorrectness("function main(): int\n  let x = 0\n  if 3 < 5\n    x = 1\n  else\n    x = 0\n  end\n  return x\nend\n", 1n);
+  });
+});
+
+describe("WASM Backend - IF_MERGE_ONLY_CONTRACT (permanent regression guard, per explicit review request)", () => {
+  // Per explicit review: Invariant 3.1A.5 gets its own permanent
+  // contract, exactly like Invariant 3.1A.4's IF_RETURN_ONLY_CONTRACT -
+  // accepting the exact Diamond+Merge shape, rejecting anything wider.
+
+  function accepts(src: string): boolean {
+    const module = compileToModule(src);
+    try {
+      emitWasmModule(module);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  it("ACCEPTS: let x=0; if(...) x=10 else x=20; return x - exactly one merge point, immediately after the if/else", () => {
+    expect(accepts("function main(): int\n  let x = 0\n  if 1 == 1\n    x = 10\n  else\n    x = 20\n  end\n  return x\nend\n")).toBe(true);
+  });
+
+  it("[DR-RB3-01] a print() call after the if/else merge is ACCEPTED: same return value and same printed values as C (formerly REJECTED)", async () => {
+    await expectAcceptedAndEqualToC("function main(): int\n  let x = 0\n  if 1 == 1\n    x = 10\n  else\n    x = 20\n  end\n  print(x)\n  return x\nend\n");
+  });
+
+  it("NOTE (was REJECTS, now ACCEPTS as of WASM Layer 2 - a deliberate spec change, not an implementation bug): nested merge (an if/else-with-merge inside another if/else's branch) - the exact original motivating case for this whole Milestone. Now correctly compiles and, confirmed live via real WebAssembly execution in layer2-nested-if-execution.test.ts, runs correctly.", () => {
+    expect(accepts("function main(): int\n  let x = 0\n  if 1 == 1\n    if 2 == 2\n      x = 1\n    else\n      x = 2\n    end\n  else\n    x = 3\n  end\n  return x\nend\n")).toBe(true);
+  });
+
+  it("REJECTS: NESTED WHILE (break and continue are both now legitimately supported per 3.1A.6b/3.1A.6c - nested loops remain out of scope)", () => {
+    expect(accepts("function main(): int\n  let i = 0\n  let total = 0\n  while i < 3\n    let j = 0\n    while j < 3\n      total = total + 1\n      j = j + 1\n    end\n    i = i + 1\n  end\n  return total\nend\n")).toBe(false);
+  });
+
+  it("REJECTS: a raw boolean literal as the if-condition (not a comparison) - unrelated to merge support specifically", () => {
+    expect(accepts("function main(): int\n  let x = 0\n  if true\n    x = 1\n  else\n    x = 2\n  end\n  return x\nend\n")).toBe(false);
+  });
+});
+
+describe("WASM Backend - MERGE_IMMEDIATE_RETURN_CONTRACT (permanent regression guard, per explicit review request)", () => {
+  // Per explicit review: the merge point must be immediately followed
+  // by return, with NO additional statements in between - even though
+  // such a program computes a correct answer (verified directly: WASM
+  // produces 30, matching real UR semantics), it is deliberately out
+  // of scope for this sub-phase's narrow Invariant 3.1A.5.
+
+  function accepts(src: string): boolean {
+    const module = compileToModule(src);
+    try {
+      emitWasmModule(module);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  it("ACCEPTS: merge immediately followed by return (the ratified shape)", () => {
+    expect(accepts("function main(): int\n  let x = 0\n  if 1 == 1\n    x = 10\n  else\n    x = 20\n  end\n  return x\nend\n")).toBe(true);
+  });
+
+  it("REJECTS (per explicit review's exact scenario): an extra assignment AFTER the merge, before return - 'if(...) x=10 else x=20 end; x=30; return x'", () => {
+    expect(accepts("function main(): int\n  let x = 0\n  if 1 == 1\n    x = 10\n  else\n    x = 20\n  end\n  x = 30\n  return x\nend\n")).toBe(false);
+  });
+
+  it("the rejection message identifies this as the MERGE_IMMEDIATE_RETURN_CONTRACT specifically, not a generic CFG error", () => {
+    const module = compileToModule("function main(): int\n  let x = 0\n  if 1 == 1\n    x = 10\n  else\n    x = 20\n  end\n  x = 30\n  return x\nend\n");
+    let caught: WasmUnsupportedError | undefined;
+    try {
+      emitWasmModule(module);
+    } catch (e) {
+      caught = e as WasmUnsupportedError;
+    }
+    expect(caught?.diagnostic.code).toBe(WASM_CODES.UNSUPPORTED_CFG_SHAPE);
+    expect(caught !== undefined && caught.message.includes("MERGE_IMMEDIATE_RETURN_CONTRACT")).toBe(true);
+  });
+
+  it("REJECTS: multiple extra assignments after the merge", () => {
+    expect(accepts("function main(): int\n  let x = 0\n  if 1 == 1\n    x = 10\n  else\n    x = 20\n  end\n  x = 30\n  x = 40\n  return x\nend\n")).toBe(false);
+  });
+});
+
+describe("WASM Backend 3.1A.6 - plain while loop (Invariant 3.1A.6), Backend Correctness", () => {
+  it("REVIEWER'S EXACT EXAMPLE (a plain counting loop): while i<5 { i=i+1 }; return i - matches C Backend", async () => {
+    await assertBackendCorrectness("function main(): int\n  let i = 0\n  while i < 5\n    i = i + 1\n  end\n  return i\nend\n", 5n);
+  });
+
+  it("a sum loop (two locals interacting inside the loop body)", async () => {
+    await assertBackendCorrectness("function main(): int\n  let i = 0\n  let total = 0\n  while i < 5\n    total = total + i\n    i = i + 1\n  end\n  return total\nend\n", 10n);
+  });
+
+  it("BOUNDARY: a loop whose condition is false immediately (zero iterations)", async () => {
+    await assertBackendCorrectness("function main(): int\n  let i = 10\n  while i < 5\n    i = i + 1\n  end\n  return i\nend\n", 10n);
+  });
+
+  it("a loop body containing a function call", async () => {
+    await assertBackendCorrectness(
+      "function inc(): int\n  return 1\nend\nfunction main(): int\n  let i = 0\n  while i < 5\n    i = i + inc()\n  end\n  return i\nend\n",
+      5n,
+    );
+  });
+
+  it("every comparison operator drives the loop condition correctly: eq, neq, lt, lte, gt, gte", async () => {
+    await assertBackendCorrectness("function main(): int\n  let i = 0\n  while i != 5\n    i = i + 1\n  end\n  return i\nend\n", 5n);
+    await assertBackendCorrectness("function main(): int\n  let i = 0\n  while i <= 4\n    i = i + 1\n  end\n  return i\nend\n", 5n);
+  });
+});
+
+describe("WASM Backend - WHILE_PLAIN_ONLY_CONTRACT (permanent regression guard, mirroring IF_RETURN_ONLY_CONTRACT/IF_MERGE_ONLY_CONTRACT's pattern for the new Invariant 3.1A.6)", () => {
+  function accepts(src: string): boolean {
+    const module = compileToModule(src);
+    try {
+      emitWasmModule(module);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  it("ACCEPTS: a plain while loop (4 blocks, no nested if inside the body)", () => {
+    expect(accepts("function main(): int\n  let i = 0\n  while i < 5\n    i = i + 1\n  end\n  return i\nend\n")).toBe(true);
+  });
+
+  it("NOTE (was REJECTS, now ACCEPTS as of 3.1A.6b): while with break - this exact case is NOT rejected in isolation; it is legitimately accepted under the SEPARATE Invariant 3.1A.6b. See WHILE_BREAK_ONLY_CONTRACT below for 3.1A.6b's own permanent regression guard.", () => {
+    expect(accepts("function main(): int\n  let i = 0\n  while i < 100\n    if i == 3\n      break\n    end\n    i = i + 1\n  end\n  return i\nend\n")).toBe(true);
+  });
+
+  it("NOTE (was REJECTS, now ACCEPTS as of 3.1A.6c): while with continue - this is now legitimately supported via the SEPARATE Invariant 3.1A.6c. See WHILE_CONTINUE_ONLY_CONTRACT below for 3.1A.6c's own permanent regression guard.", () => {
+    expect(accepts("function main(): int\n  let i = 0\n  let total = 0\n  while i < 10\n    i = i + 1\n    if i == 5\n      continue\n    end\n    total = total + i\n  end\n  return total\nend\n")).toBe(true);
+  });
+
+  it("REJECTS: nested while (a while inside a while's body)", () => {
+    expect(accepts("function main(): int\n  let i = 0\n  let total = 0\n  while i < 3\n    let j = 0\n    while j < 3\n      total = total + 1\n      j = j + 1\n    end\n    i = i + 1\n  end\n  return total\nend\n")).toBe(false);
+  });
+
+  it("REJECTS: a raw boolean literal as the while-condition (not a comparison)", () => {
+    expect(accepts("function main(): int\n  let i = 0\n  while true\n    i = i + 1\n  end\n  return i\nend\n")).toBe(false);
+  });
+});
+
+describe("WASM Backend - WHILE_NO_BRANCH_EXIT_CONTRACT (permanent regression guard, per explicit review request - a SEPARATELY NAMED protection, not merely implied by WHILE_PLAIN_ONLY_CONTRACT)", () => {
+  // Per explicit review: this exists specifically so that a future
+  // partial/accidental introduction of break support during an
+  // unrelated change cannot silently slip through. loop_body must
+  // contain NO early-exit branch of any kind - checked as its own
+  // property, not merely implied by the 4-block count.
+  //
+  // Reason for this restriction (ratified, per review): break/continue
+  // are deferred because of the CFG SHAPE they introduce, requiring
+  // its own sub-phase (3.1A.6b) - this is a DELIBERATE SCOPE NARROWING,
+  // NOT a WebAssembly limitation. WASM's own br/br_if instructions
+  // have no objection to branching out of a loop body early.
+
+  function accepts(src: string): boolean {
+    const module = compileToModule(src);
+    try {
+      emitWasmModule(module);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  it("ACCEPTS: a loop body with NO early-exit branch - falls through to the back-edge branch only", () => {
+    expect(accepts("function main(): int\n  let i = 0\n  while i < 5\n    i = i + 1\n  end\n  return i\nend\n")).toBe(true);
+  });
+
+  it("NOTE (was REJECTS, now ACCEPTS as of 3.1A.6b): break - this is now legitimately supported via the SEPARATE Invariant 3.1A.6b, which has its own dedicated WHILE_BREAK_ONLY_CONTRACT below. This contract (WHILE_NO_BRANCH_EXIT_CONTRACT) is specifically about Invariant 3.1A.6's plain-loop shape, which break falls outside of via a different, newer invariant.", () => {
+    expect(accepts("function main(): int\n  let i = 0\n  while i < 100\n    if i == 3\n      break\n    end\n    i = i + 1\n  end\n  return i\nend\n")).toBe(true);
+  });
+
+  it("NOTE (was REJECTS, now ACCEPTS as of 3.1A.6c): continue - this is now legitimately supported via the SEPARATE Invariant 3.1A.6c. This contract (WHILE_NO_BRANCH_EXIT_CONTRACT) is specifically about Invariant 3.1A.6's plain-loop shape, which continue falls outside of via a different, newer invariant.", () => {
+    expect(accepts("function main(): int\n  let i = 0\n  let total = 0\n  while i < 10\n    i = i + 1\n    if i == 5\n      continue\n    end\n    total = total + i\n  end\n  return total\nend\n")).toBe(true);
+  });
+
+  it("REJECTS: an unconditional break as the very first statement in the loop body (the narrowest possible early-exit shape)", () => {
+    expect(accepts("function main(): int\n  while true\n    break\n  end\n  return 1\nend\n")).toBe(false);
+  });
+
+  it("the rejection of the degenerate 'while true { break }' shape (4 blocks, no nested if at all) is due to loop_body's terminator not being a plain branch back to loop_header - checked as an explicit, named property", () => {
+    const module = compileToModule("function main(): int\n  while true\n    break\n  end\n  return 1\nend\n");
+    let caught: WasmUnsupportedError | undefined;
+    try {
+      emitWasmModule(module);
+    } catch (e) {
+      caught = e as WasmUnsupportedError;
+    }
+    expect(caught?.diagnostic.code).toBe(WASM_CODES.UNSUPPORTED_CFG_SHAPE);
+  });
+});
+
+describe("WASM Backend 3.1A.6b - while + break (Invariant 3.1A.6b), Backend Correctness", () => {
+  it("REVIEWER'S EXACT EXAMPLE: while i<100 { if i==3 { break } ; i=i+1 } - matches C Backend", async () => {
+    await assertBackendCorrectness("function main(): int\n  let i = 0\n  while i < 100\n    if i == 3\n      break\n    end\n    i = i + 1\n  end\n  return i\nend\n", 3n);
+  });
+
+  it("BOUNDARY: break never fires - loop completes normally", async () => {
+    await assertBackendCorrectness("function main(): int\n  let i = 0\n  while i < 5\n    if i == 99\n      break\n    end\n    i = i + 1\n  end\n  return i\nend\n", 5n);
+  });
+
+  it("BOUNDARY: break fires on the very first iteration", async () => {
+    await assertBackendCorrectness("function main(): int\n  let i = 0\n  while i < 100\n    if i == 0\n      break\n    end\n    i = i + 1\n  end\n  return i\nend\n", 0n);
+  });
+
+  it("break with accumulated state before the check (a sum loop with an early exit)", async () => {
+    await assertBackendCorrectness("function main(): int\n  let i = 0\n  let total = 0\n  while i < 100\n    total = total + i\n    if total == 6\n      break\n    end\n    i = i + 1\n  end\n  return total\nend\n", 6n);
+  });
+});
+
+describe("WASM Backend - WHILE_BREAK_ONLY_CONTRACT (permanent regression guard, per the same discipline as every prior Invariant)", () => {
+  // Mirrors IF_RETURN_ONLY_CONTRACT / IF_MERGE_ONLY_CONTRACT / WHILE_PLAIN_ONLY_CONTRACT's
+  // pattern for the new Invariant 3.1A.6b: accepts the exact break shape,
+  // rejects continue (a structurally different back-edge shape) and anything wider.
+
+  function accepts(src: string): boolean {
+    const module = compileToModule(src);
+    try {
+      emitWasmModule(module);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  it("ACCEPTS: while with a single break (then -> loop_exit directly)", () => {
+    expect(accepts("function main(): int\n  let i = 0\n  while i < 100\n    if i == 3\n      break\n    end\n    i = i + 1\n  end\n  return i\nend\n")).toBe(true);
+  });
+
+  it("NOTE (was REJECTS, now ACCEPTS as of 3.1A.6c): continue - now legitimately supported via the SEPARATE Invariant 3.1A.6c (its own dedicated WHILE_CONTINUE_ONLY_CONTRACT exists below). This contract (WHILE_BREAK_ONLY_CONTRACT) remains specifically about break's own shape, unaffected by continue's separate support.", () => {
+    expect(accepts("function main(): int\n  let i = 0\n  let total = 0\n  while i < 10\n    i = i + 1\n    if i == 5\n      continue\n    end\n    total = total + i\n  end\n  return total\nend\n")).toBe(true);
+  });
+
+  it("break and continue are correctly classified as DIFFERENT accepted shapes, per classifySevenBlockShape's structural distinction (not merely both happening to pass)", () => {
+    const breakModule = compileToModule("function main(): int\n  let i = 0\n  while i < 100\n    if i == 3\n      break\n    end\n    i = i + 1\n  end\n  return i\nend\n");
+    const continueModule = compileToModule("function main(): int\n  let i = 0\n  let total = 0\n  while i < 10\n    i = i + 1\n    if i == 5\n      continue\n    end\n    total = total + i\n  end\n  return total\nend\n");
+    expect(() => emitWasmModule(breakModule)).not.toThrow();
+    expect(() => emitWasmModule(continueModule)).not.toThrow();
+  });
+
+  it("REJECTS: two breaks in the same loop body (multiple early-exit checks)", () => {
+    expect(accepts("function main(): int\n  let i = 0\n  while i < 100\n    if i == 3\n      break\n    end\n    if i == 5\n      break\n    end\n    i = i + 1\n  end\n  return i\nend\n")).toBe(false);
+  });
+
+  it("REJECTS: nested while inside a break-containing loop", () => {
+    expect(accepts("function main(): int\n  let i = 0\n  while i < 3\n    if i == 1\n      break\n    end\n    let j = 0\n    while j < 3\n      j = j + 1\n    end\n    i = i + 1\n  end\n  return i\nend\n")).toBe(false);
+  });
+});
+
+describe("WASM Backend 3.1A.6c - while + continue (Invariant 3.1A.6c), Backend Correctness", () => {
+  it("REVIEWER'S EXACT EXAMPLE: while i<10 { i=i+1; if i==5 { continue } ; total=total+i } - matches C Backend (50)", async () => {
+    await assertBackendCorrectness("function main(): int\n  let i = 0\n  let total = 0\n  while i < 10\n    i = i + 1\n    if i == 5\n      continue\n    end\n    total = total + i\n  end\n  return total\nend\n", 50n);
+  });
+
+  it("BOUNDARY: continue never fires - loop completes normally", async () => {
+    await assertBackendCorrectness("function main(): int\n  let i = 0\n  let total = 0\n  while i < 5\n    i = i + 1\n    if i == 99\n      continue\n    end\n    total = total + i\n  end\n  return total\nend\n", 15n);
+  });
+
+  it("BOUNDARY: continue fires on the very first iteration", async () => {
+    await assertBackendCorrectness("function main(): int\n  let i = 0\n  let total = 0\n  while i < 5\n    i = i + 1\n    if i == 1\n      continue\n    end\n    total = total + i\n  end\n  return total\nend\n", 14n);
+  });
+
+  it("break (3.1A.6b) still works correctly, confirming no regression from the classifySevenBlockShape dispatch added for continue", async () => {
+    await assertBackendCorrectness("function main(): int\n  let i = 0\n  while i < 100\n    if i == 3\n      break\n    end\n    i = i + 1\n  end\n  return i\nend\n", 3n);
+  });
+});
+
+describe("WASM Backend - WHILE_CONTINUE_ONLY_CONTRACT (permanent regression guard, mirroring WHILE_BREAK_ONLY_CONTRACT's pattern for the new Invariant 3.1A.6c)", () => {
+  function accepts(src: string): boolean {
+    const module = compileToModule(src);
+    try {
+      emitWasmModule(module);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  it("ACCEPTS: while with a single continue (then -> loop_header directly)", () => {
+    expect(accepts("function main(): int\n  let i = 0\n  let total = 0\n  while i < 10\n    i = i + 1\n    if i == 5\n      continue\n    end\n    total = total + i\n  end\n  return total\nend\n")).toBe(true);
+  });
+
+  it("REJECTS: break AND continue together in the same loop body (explicitly out of scope per WASM_BACKEND_SPEC.md section 6c, not assumed as free composition)", () => {
+    expect(accepts("function main(): int\n  let i = 0\n  while i < 100\n    if i == 3\n      break\n    end\n    if i == 5\n      continue\n    end\n    i = i + 1\n  end\n  return i\nend\n")).toBe(false);
+  });
+
+  it("REJECTS: two continues in the same loop body", () => {
+    expect(accepts("function main(): int\n  let i = 0\n  let total = 0\n  while i < 10\n    i = i + 1\n    if i == 3\n      continue\n    end\n    if i == 5\n      continue\n    end\n    total = total + i\n  end\n  return total\nend\n")).toBe(false);
+  });
+
+  it("REJECTS: nested while inside a continue-containing loop", () => {
+    expect(accepts("function main(): int\n  let i = 0\n  let total = 0\n  while i < 3\n    i = i + 1\n    if i == 1\n      continue\n    end\n    let j = 0\n    while j < 3\n      j = j + 1\n    end\n    total = total + 1\n  end\n  return total\nend\n")).toBe(false);
+  });
+});
+
+describe("WASM Backend - CONTINUE_BRANCH_DEPTH_CONTRACT (permanent regression guard, per explicit review request - proving br 1 vs br 2 produces a BEHAVIORAL not structural regression, mirroring break's own precedent)", () => {
+  // Per explicit review: this must prove that swapping br 1 for the
+  // wrong br 2 does NOT cause a validation error - it produces a
+  // syntactically VALID module with a silently WRONG result, exactly
+  // as proven by direct hand-built-module testing before this batch's
+  // implementation began (br 1 -> 50, matching C Backend; br 2 -> 10,
+  // still valid WASM but wrong, behaving like break instead).
+
+  it("the correct br 1 depth produces the mathematically correct result (50), confirmed matching C Backend", async () => {
+    await assertBackendCorrectness("function main(): int\n  let i = 0\n  let total = 0\n  while i < 10\n    i = i + 1\n    if i == 5\n      continue\n    end\n    total = total + i\n  end\n  return total\nend\n", 50n);
+  });
+});
+
+describe("WASM Backend 3.1B.1 - Linear Memory Foundation, Backend Correctness", () => {
+  it("REVIEWER'S ORIGINAL EXAMPLE: let arr=[10,20,30]; return arr[1] - matches C Backend", async () => {
+    await assertBackendCorrectness("function main(): int\n  let arr = [10, 20, 30]\n  return arr[1]\nend\n", 20n);
+  });
+
+  it("BOUNDARY: read index 0 (the first element)", async () => {
+    await assertBackendCorrectness("function main(): int\n  let arr = [10, 20, 30]\n  return arr[0]\nend\n", 10n);
+  });
+
+  it("BOUNDARY: read the last valid index", async () => {
+    await assertBackendCorrectness("function main(): int\n  let arr = [10, 20, 30]\n  return arr[2]\nend\n", 30n);
+  });
+
+  it("two arrays declared in sequence (the exact MEMORY_LAYOUT_EXAMPLES.md Example 2 scenario)", async () => {
+    await assertBackendCorrectness("function main(): int\n  let a = [7, 8]\n  let b = [1, 2, 3, 4]\n  return b[2]\nend\n", 3n);
+  });
+
+  it("a COMPUTED (non-literal) index - per WASM_MEMORY_MODEL_SPEC.md section 4's Single-Formula Commitment, this must work identically to a constant index", async () => {
+    await assertBackendCorrectness("function main(): int\n  let arr = [10, 20, 30]\n  let i = 1 + 1\n  return arr[i]\nend\n", 30n);
+  });
+
+  it("a computed (arithmetic expression) VALUE stored into an array element", async () => {
+    await assertBackendCorrectness("function main(): int\n  let arr = [2 + 3, 10 - 4]\n  return arr[0]\nend\n", 5n);
+  });
+});
+
+describe("WASM Backend - ARRAY_LAYOUT_CONTRACT (permanent regression guard, per WASM_MEMORY_MODEL_SPEC.md section 9 - directly inspects real memory contents, not merely the final computed result)", () => {
+  async function getMemoryAfterExecution(src: string): Promise<DataView> {
+    const module = compileToModule(src);
+    const bytes = emitWasmModule(module);
+    const { instance } = await WebAssembly.instantiate(bytes);
+    (instance.exports.main as () => bigint)();
+    return new DataView((instance.exports.memory as WebAssembly.Memory).buffer);
+  }
+
+  it("a single 3-element array lands at EXACTLY the offsets WASM_MEMORY_MODEL_SPEC.md section 2 specifies (length at +0, elements at +8/+16/+24 relative to base)", async () => {
+    const view = await getMemoryAfterExecution("function main(): int\n  let arr = [10, 20, 30]\n  return arr[1]\nend\n");
+    // Base address is BUMP_INITIAL_ADDRESS (8), per the Memory Model.
+    expect(view.getBigInt64(8, true)).toBe(3n);   // length
+    expect(view.getBigInt64(16, true)).toBe(10n); // arr[0]
+    expect(view.getBigInt64(24, true)).toBe(20n); // arr[1]
+    expect(view.getBigInt64(32, true)).toBe(30n); // arr[2]
+  });
+
+  it("the exact two-array layout from MEMORY_LAYOUT_EXAMPLES.md Example 2 (adjusted for this Backend's actual BUMP_INITIAL_ADDRESS base of 8, not the example's illustrative 1024)", async () => {
+    const view = await getMemoryAfterExecution("function main(): int\n  let a = [7, 8]\n  let b = [1, 2, 3, 4]\n  return b[2]\nend\n");
+    expect(view.getBigInt64(8, true)).toBe(2n);   // a.length
+    expect(view.getBigInt64(16, true)).toBe(7n);  // a[0]
+    expect(view.getBigInt64(24, true)).toBe(8n);  // a[1]
+    expect(view.getBigInt64(32, true)).toBe(4n);  // b.length (a's base 8 + a's total size 24 = 32)
+    expect(view.getBigInt64(40, true)).toBe(1n);  // b[0]
+    expect(view.getBigInt64(48, true)).toBe(2n);  // b[1]
+    expect(view.getBigInt64(56, true)).toBe(3n);  // b[2]
+    expect(view.getBigInt64(64, true)).toBe(4n);  // b[3]
+  });
+
+  it("address 0-7 (the reserved zero region) is never written by any array allocation", async () => {
+    const view = await getMemoryAfterExecution("function main(): int\n  let arr = [10, 20, 30]\n  return arr[1]\nend\n");
+    expect(view.getBigInt64(0, true)).toBe(0n);
+  });
+});
+
+describe("WASM Backend - BUMP_MONOTONIC_CONTRACT (permanent regression guard, per WASM_MEMORY_MODEL_SPEC.md section 9)", () => {
+  it("two arrays declared in sequence receive NON-OVERLAPPING address ranges, with the second's base equal to the first's base plus the first's total size (8 + length*8)", async () => {
+    const module = compileToModule("function main(): int\n  let a = [7, 8]\n  let b = [1, 2, 3, 4]\n  return b[2]\nend\n");
+    const bytes = emitWasmModule(module);
+    const { instance } = await WebAssembly.instantiate(bytes);
+    (instance.exports.main as () => bigint)();
+    const view = new DataView((instance.exports.memory as WebAssembly.Memory).buffer);
+    const aBase = 8; // BUMP_INITIAL_ADDRESS
+    const aTotalSize = 8 + 2 * 8; // ARRAY_HEADER_SIZE + length*ELEMENT_SIZE
+    const bBase = aBase + aTotalSize;
+    expect(bBase).toBe(32);
+    expect(view.getBigInt64(bBase, true)).toBe(4n); // b.length, confirming b truly starts exactly here
+  });
+});
+
+describe("WASM Backend - ELEMENT_SIZE_IMMUTABLE_CONTRACT (permanent regression guard, per explicit review request)", () => {
+  it("ELEMENT_SIZE is exactly 8 (the current, only supported element width - i64)", async () => {
+    const { ELEMENT_SIZE } = await import("../../../src/backend/wasm/array-memory.js");
+    expect(ELEMENT_SIZE).toBe(8);
+  });
+
+  it("every element in a real array is spaced EXACTLY ELEMENT_SIZE bytes apart in actual emitted memory - not merely asserted, but measured", async () => {
+    const module = compileToModule("function main(): int\n  let arr = [1, 2, 3]\n  return arr[0]\nend\n");
+    const bytes = emitWasmModule(module);
+    const { instance } = await WebAssembly.instantiate(bytes);
+    (instance.exports.main as () => bigint)();
+    const view = new DataView((instance.exports.memory as WebAssembly.Memory).buffer);
+    const { ELEMENT_SIZE, ARRAY_HEADER_SIZE, BUMP_INITIAL_ADDRESS } = await import("../../../src/backend/wasm/array-memory.js");
+    const elem0Addr = BUMP_INITIAL_ADDRESS + ARRAY_HEADER_SIZE;
+    expect(view.getBigInt64(elem0Addr, true)).toBe(1n);
+    expect(view.getBigInt64(elem0Addr + ELEMENT_SIZE, true)).toBe(2n);
+    expect(view.getBigInt64(elem0Addr + 2 * ELEMENT_SIZE, true)).toBe(3n);
+  });
+});
+
+describe("WASM Backend - MEMORY_LAYOUT_IMMUTABLE_CONTRACT (permanent, cross-phase regression guard, per explicit review request - must NEVER be updated to match a layout change; a failure here means the layout drifted and must be reverted)", () => {
+  it("ARRAY_HEADER_SIZE is exactly 8 (one i64 length field) - the ratified, permanent layout from WASM_MEMORY_MODEL_SPEC.md section 2", async () => {
+    const { ARRAY_HEADER_SIZE } = await import("../../../src/backend/wasm/array-memory.js");
+    expect(ARRAY_HEADER_SIZE).toBe(8);
+  });
+
+  it("BUMP_INITIAL_ADDRESS is exactly 8 (bytes 0-7 permanently reserved) - the ratified, permanent starting point from WASM_MEMORY_MODEL_SPEC.md section 1", async () => {
+    const { BUMP_INITIAL_ADDRESS } = await import("../../../src/backend/wasm/array-memory.js");
+    expect(BUMP_INITIAL_ADDRESS).toBe(8);
+  });
+
+  it("the length field is at offset +0 and the first element is at offset +ARRAY_HEADER_SIZE, relative to the array's base - confirmed against real emitted memory, not merely the constants in isolation. NOTE: uses a 2-element array, not 1 - a single-element array (length===1) is a PRE-EXISTING, documented Level 2.8 edge case (IRLocalSlot.length's own doc comment: 'undefined/1 means scalar') that the ALREADY-FROZEN C Backend itself cannot compile either (confirmed directly: it emits invalid C, declaring a scalar then indexing it as an array) - out of scope for this batch, not a WASM Backend defect.", async () => {
+    const module = compileToModule("function main(): int\n  let arr = [77, 99]\n  return arr[1]\nend\n");
+    const bytes = emitWasmModule(module);
+    const { instance } = await WebAssembly.instantiate(bytes);
+    (instance.exports.main as () => bigint)();
+    const view = new DataView((instance.exports.memory as WebAssembly.Memory).buffer);
+    const { ARRAY_HEADER_SIZE, BUMP_INITIAL_ADDRESS } = await import("../../../src/backend/wasm/array-memory.js");
+    expect(view.getBigInt64(BUMP_INITIAL_ADDRESS + 0, true)).toBe(2n);  // length
+    expect(view.getBigInt64(BUMP_INITIAL_ADDRESS + ARRAY_HEADER_SIZE, true)).toBe(77n); // arr[0]
+    expect(view.getBigInt64(BUMP_INITIAL_ADDRESS + ARRAY_HEADER_SIZE + ARRAY_HEADER_SIZE, true)).toBe(99n); // arr[1]
+  });
+});
+
+describe("WASM Backend - BOUNDS_CHECK_REQUIRED_CONTRACT (3.1B.2 - supersedes NO_BOUNDS_CHECK_YET_CONTRACT, per explicit review: 'لا أنصح بحذفه، بل استبداله'. HISTORICAL NOTE, preserved rather than deleted: NO_BOUNDS_CHECK_YET_CONTRACT (3.1B.1) documented the ABSENCE of this check as a real, then-current gap; this contract documents its PRESENCE as a now-mandatory guarantee - the same underlying behavior, tracked across its two states, not two unrelated tests.)", () => {
+  it("an in-bounds constant index proceeds normally (no trap)", async () => {
+    const module = compileToModule("function main(): int\n  let arr = [10, 20, 30]\n  return arr[1]\nend\n");
+    const bytes = emitWasmModule(module);
+    expect(WebAssembly.validate(bytes)).toBe(true);
+    const { instance } = await WebAssembly.instantiate(bytes);
+    expect((instance.exports.main as () => bigint)()).toBe(20n);
+  });
+
+  it("an out-of-bounds constant index (index 5 on a 3-element array) is now MANDATORILY rejected - traps via a real WebAssembly.RuntimeError, confirmed by actual execution", async () => {
+    const module = compileToModule("function main(): int\n  let arr = [10, 20, 30]\n  return arr[5]\nend\n");
+    const bytes = emitWasmModule(module);
+    expect(WebAssembly.validate(bytes)).toBe(true);
+    const { instance } = await WebAssembly.instantiate(bytes);
+    let trapped = false;
+    try {
+      (instance.exports.main as () => bigint)();
+    } catch (e) {
+      trapped = e instanceof WebAssembly.RuntimeError;
+    }
+    expect(trapped).toBe(true);
+  });
+
+  it("a negative index is also rejected - traps via a real WebAssembly.RuntimeError", async () => {
+    const module = compileToModule("function main(): int\n  let arr = [10, 20, 30]\n  return arr[0 - 1]\nend\n");
+    const bytes = emitWasmModule(module);
+    expect(WebAssembly.validate(bytes)).toBe(true);
+    const { instance } = await WebAssembly.instantiate(bytes);
+    let trapped = false;
+    try {
+      (instance.exports.main as () => bigint)();
+    } catch (e) {
+      trapped = e instanceof WebAssembly.RuntimeError;
+    }
+    expect(trapped).toBe(true);
+  });
+
+  it("an out-of-bounds array_store is also rejected, not just array_load", async () => {
+    const module = compileToModule("function main(): int\n  let arr = [10, 20, 30]\n  arr[10] = 99\n  return arr[0]\nend\n");
+    const bytes = emitWasmModule(module);
+    expect(WebAssembly.validate(bytes)).toBe(true);
+    const { instance } = await WebAssembly.instantiate(bytes);
+    let trapped = false;
+    try {
+      (instance.exports.main as () => bigint)();
+    } catch (e) {
+      trapped = e instanceof WebAssembly.RuntimeError;
+    }
+    expect(trapped).toBe(true);
+  });
+
+  it("both backends independently reject an out-of-bounds access, per UR's own semantics (WASM_MEMORY_MODEL_SPEC.md section 10b's corrected framing: NOT 'WASM mimics C' - each backend implements the same UR-level requirement on its own terms)", async () => {
+    const src = "function main(): int\n  let arr = [10, 20, 30]\n  return arr[5]\nend\n";
+    const module = compileToModule(src);
+    const bytes = emitWasmModule(module);
+    const { instance } = await WebAssembly.instantiate(bytes);
+    let wasmTrapped = false;
+    try {
+      (instance.exports.main as () => bigint)();
+    } catch (e) {
+      wasmTrapped = e instanceof WebAssembly.RuntimeError;
+    }
+    expect(wasmTrapped).toBe(true);
+
+    if (hasGcc) {
+      const cCompiled = compileC(emitC(module), "a.out", { captureWarnings: true });
+      expect(cCompiled.ok).toBe(true);
+      if (cCompiled.ok) {
+        const cResult = runExecutable(cCompiled.value);
+        cleanupExecutable(cCompiled.value);
+        // C Backend independently rejects via ur_panic (a real, non-zero exit) - a DIFFERENT mechanism than WASM's trap, both correctly enforcing the same UR semantics.
+        expect(cResult.exitCode).not.toBe(0);
+      }
+    }
+  });
+});
+
+describe("WASM Backend 3.1B.1 - ratified rejections: still out of scope this batch", () => {
+  function expectRejection(src: string) {
+    const module = compileToModule(src);
+    expect(() => emitWasmModule(module)).toThrow(WasmUnsupportedError);
+  }
+
+  it("[DR-RB3-01] arrays inside if/else are ACCEPTED and equal C (3.1B.4 landed; formerly rejected)", async () => {
+    await expectAcceptedAndEqualToC("function main(): int\n  let arr = [1, 2, 3]\n  if 1 == 1\n    return arr[0]\n  else\n    return arr[1]\n  end\nend\n");
+  });
+
+  it("NOTE (was 'rejected', now 'accepted at compile time'): array access AFTER a while loop (in loop_exit, using the loop's final value) is conceptually identical to 3.1B.3's dynamic-index case (arr[f()]), NOT 3.1B.5's in-loop-body concern - loop_exit runs once, after the loop, with the value already fixed. This specific test case genuinely traps AT RUNTIME because i ends at 3, out of bounds for a 3-element array (indices 0-2) - a correct bounds-check trap, not a compile-time rejection.", async () => {
+    const module = compileToModule("function main(): int\n  let arr = [1, 2, 3]\n  let i = 0\n  while i < 3\n    i = i + 1\n  end\n  return arr[i]\nend\n");
+    const bytes = emitWasmModule(module);
+    expect(WebAssembly.validate(bytes)).toBe(true);
+    const { instance } = await WebAssembly.instantiate(bytes);
+    let trapped = false;
+    try {
+      (instance.exports.main as () => bigint)();
+    } catch (e) {
+      trapped = e instanceof WebAssembly.RuntimeError;
+    }
+    expect(trapped).toBe(true);
+  });
+
+  it("the IN-BOUNDS equivalent (loop ends with i=2, a valid index) correctly returns the right value, matching C Backend - confirming this is a genuine runtime bounds trap for the out-of-bounds case above, not a blanket rejection of post-loop dynamic indices", async () => {
+    await assertBackendCorrectness("function main(): int\n  let arr = [10, 20, 30]\n  let i = 0\n  while i < 2\n    i = i + 1\n  end\n  return arr[i]\nend\n", 30n);
+  });
+});
+
+describe("WASM Backend 3.1B.3 - Dynamic Index, Backend Correctness (per WASM_MEMORY_MODEL_SPEC.md section 10c - confirming existing behavior, no new implementation)", () => {
+  it("REVIEWER-RELEVANT EXAMPLE: arr[f()] where f() returns a runtime-unknowable value at compile time - matches C Backend", async () => {
+    await assertBackendCorrectness("function f(): int\n  return 2\nend\nfunction main(): int\n  let arr = [10, 20, 30]\n  return arr[f()]\nend\n", 30n);
+  });
+
+  it("arithmetic-computed index: arr[1+1]", async () => {
+    await assertBackendCorrectness("function main(): int\n  let arr = [10, 20, 30]\n  return arr[1 + 1]\nend\n", 30n);
+  });
+
+  it("a function-call index used in array_store (write), not just array_load (read)", async () => {
+    await assertBackendCorrectness("function f(): int\n  return 1\nend\nfunction main(): int\n  let arr = [10, 20, 30]\n  arr[f()] = 99\n  return arr[1]\nend\n", 99n);
+  });
+
+  it("arr[a + b] where BOTH a and b are function-call results (genuinely non-foldable - not a simple variable reference, which Lowering's own environment-rebinding would resolve away, per IR_COPY_PRESENCE_AUDIT.md)", async () => {
+    await assertBackendCorrectness("function ga(): int\n  return 1\nend\nfunction gb(): int\n  return 1\nend\nfunction main(): int\n  let arr = [10, 20, 30]\n  let a = ga()\n  let b = gb()\n  return arr[a + b]\nend\n", 30n);
+  });
+
+  it("arr[x * 2] where x is a function-call result", async () => {
+    await assertBackendCorrectness("function gx(): int\n  return 1\nend\nfunction main(): int\n  let arr = [10, 20, 30]\n  let x = gx()\n  return arr[x * 2]\nend\n", 30n);
+  });
+
+  it("arr[(a + b) * c] - a deeper nested expression tree, all operands sourced from calls/consts, no array-index-specific path", async () => {
+    await assertBackendCorrectness("function ga(): int\n  return 1\nend\nfunction main(): int\n  let arr = [10, 20, 30]\n  let a = ga()\n  let b = 0\n  let c = 1\n  return arr[(a + b) * c]\nend\n", 20n);
+  });
+
+  it("arr[g()] where g() itself calls f() internally - the closest equivalent to arr[g(f())] expressible within this Backend's current scope (calls with arguments, i.e. passing f()'s result INTO g(), remain out of scope per 3.1A.3 - zero-argument calls only; this tests a call-of-call shape instead, which is expressible)", async () => {
+    await assertBackendCorrectness("function f(): int\n  return 1\nend\nfunction g(): int\n  return f() + 1\nend\nfunction main(): int\n  let arr = [10, 20, 30]\n  return arr[g()]\nend\n", 30n);
+  });
+});
+
+describe("WASM Backend - DYNAMIC_INDEX_CONTRACT (permanent regression guard, per explicit review request - confirms the SAME address formula and bounds-check machinery compose correctly for dynamic indices, without any array-index-specific special-casing)", () => {
+  function accepts(src: string): boolean {
+    const module = compileToModule(src);
+    try {
+      emitWasmModule(module);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  it("ACCEPTS: a function-call-sourced index (genuinely unknowable at compile time)", () => {
+    expect(accepts("function f(): int\n  return 1\nend\nfunction main(): int\n  let arr = [10, 20, 30]\n  return arr[f()]\nend\n")).toBe(true);
+  });
+
+  it("bounds checking STILL traps for an out-of-bounds DYNAMIC index (composes correctly with 3.1B.2, unmodified)", async () => {
+    const module = compileToModule("function f(): int\n  return 10\nend\nfunction main(): int\n  let arr = [10, 20, 30]\n  return arr[f()]\nend\n");
+    const bytes = emitWasmModule(module);
+    expect(WebAssembly.validate(bytes)).toBe(true);
+    const { instance } = await WebAssembly.instantiate(bytes);
+    let trapped = false;
+    try {
+      (instance.exports.main as () => bigint)();
+    } catch (e) {
+      trapped = e instanceof WebAssembly.RuntimeError;
+    }
+    expect(trapped).toBe(true);
+  });
+
+  it("[DR-RB3-01] an index value reused elsewhere is ACCEPTED and equals C (formerly REJECTED by the Expression Tree Property)", async () => {
+    await expectAcceptedAndEqualToC("function main(): int\n  let arr = [10, 20, 30]\n  let i = 1 + 1\n  return arr[i] + i\nend\n");
+  });
+
+  it("[DR-RB3-01] an array index reused elsewhere no longer produces any Expression Tree Property rejection: it compiles and equals C", async () => {
+    const module = compileToModule("function main(): int\n  let arr = [10, 20, 30]\n  let i = 1 + 1\n  return arr[i] + i\nend\n");
+    let caught: WasmUnsupportedError | undefined;
+    try { emitWasmModule(module); } catch (e) { caught = e as WasmUnsupportedError; }
+    expect(caught).toBeUndefined();
+    await expectAcceptedAndEqualToC("function main(): int\n  let arr = [10, 20, 30]\n  let i = 1 + 1\n  return arr[i] + i\nend\n");
+  });
+});
+
+describe("WASM Backend 3.1B.4 - Arrays Inside Control Flow (constant index only), Backend Correctness (per WASM_MEMORY_MODEL_SPEC.md section 10d)", () => {
+  it("array WRITE inside if/else (array allocated in entry, Merge shape)", async () => {
+    await assertBackendCorrectness("function main(): int\n  let arr = [0, 0, 0]\n  if 1 == 1\n    arr[0] = 10\n  else\n    arr[0] = 20\n  end\n  return arr[0]\nend\n", 10n);
+  });
+
+  it("array WRITE inside if/else, false branch", async () => {
+    await assertBackendCorrectness("function main(): int\n  let arr = [0, 0, 0]\n  if 1 == 2\n    arr[0] = 10\n  else\n    arr[0] = 20\n  end\n  return arr[0]\nend\n", 20n);
+  });
+
+  it("array READ inside if/else, result stored to a scalar merged variable", async () => {
+    await assertBackendCorrectness("function main(): int\n  let arr = [10, 20, 30]\n  let x = 0\n  if 1 == 1\n    x = arr[0]\n  else\n    x = arr[1]\n  end\n  return x\nend\n", 10n);
+  });
+
+  it("array WRITE inside a while loop body, with a CONSTANT index (not the loop variable)", async () => {
+    await assertBackendCorrectness("function main(): int\n  let arr = [0, 0, 0]\n  let count = 0\n  while count < 3\n    arr[1] = 50\n    count = count + 1\n  end\n  return arr[1]\nend\n", 50n);
+  });
+
+  it("array READ inside a while loop body, with a CONSTANT index, accumulated into a scalar", async () => {
+    await assertBackendCorrectness("function main(): int\n  let arr = [10, 20, 30]\n  let total = 0\n  let count = 0\n  while count < 3\n    total = total + arr[1]\n    count = count + 1\n  end\n  return total\nend\n", 60n);
+  });
+
+  it("bounds checking composes correctly for an array access inside if/else (out-of-bounds still traps)", async () => {
+    const module = compileToModule("function main(): int\n  let arr = [10, 20, 30]\n  let x = 0\n  if 1 == 1\n    x = arr[10]\n  else\n    x = 0\n  end\n  return x\nend\n");
+    const bytes = emitWasmModule(module);
+    expect(WebAssembly.validate(bytes)).toBe(true);
+    const { instance } = await WebAssembly.instantiate(bytes);
+    let trapped = false;
+    try {
+      (instance.exports.main as () => bigint)();
+    } catch (e) {
+      trapped = e instanceof WebAssembly.RuntimeError;
+    }
+    expect(trapped).toBe(true);
+  });
+});
+
+describe("WASM Backend - ARRAY_CONTROL_FLOW_CONTRACT (permanent regression guard, per WASM_MEMORY_MODEL_SPEC.md section 10d)", () => {
+  function accepts(src: string): boolean {
+    const module = compileToModule(src);
+    try {
+      emitWasmModule(module);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  it("ACCEPTS: array write inside if/else, constant index, allocated in entry", () => {
+    expect(accepts("function main(): int\n  let arr = [0, 0, 0]\n  if 1 == 1\n    arr[0] = 10\n  else\n    arr[0] = 20\n  end\n  return arr[0]\nend\n")).toBe(true);
+  });
+
+  it("ACCEPTS: array read/write inside while, constant index, allocated in entry", () => {
+    expect(accepts("function main(): int\n  let arr = [0, 0, 0]\n  let count = 0\n  while count < 3\n    arr[1] = 50\n    count = count + 1\n  end\n  return arr[1]\nend\n")).toBe(true);
+  });
+
+  it("NOTE (was REJECTS, now ACCEPTS as of 3.1B.5): DYNAMIC index (the loop's own mutated variable) inside a while loop BODY - this is now legitimately supported, per the SEPARATE 3.1B.5 phase. See the dedicated DYNAMIC_INDEX_IN_LOOP_CONTRACT below for 3.1B.5's own permanent regression guard.", () => {
+    expect(accepts("function main(): int\n  let arr = [0, 0, 0]\n  let i = 0\n  while i < 3\n    arr[i] = i\n    i = i + 1\n  end\n  return arr[2]\nend\n")).toBe(true);
+  });
+
+  it("[DR-RB3-01] CONDITIONAL ALLOCATION in one if/else branch is ACCEPTED and equals C (formerly REJECTED, deferred to 3.1B.6)", async () => {
+    await expectAcceptedAndEqualToC("function main(): int\n  let x = 0\n  if 1 == 1\n    let arr = [10, 20, 30]\n    x = arr[0]\n  else\n    x = 99\n  end\n  return x\nend\n");
+  });
+
+  it("[DR-RB3-01] the rejection message for the construct that REMAINS out of scope (allocation inside a while-loop body) explicitly names 3.1B.6 (retargeted: conditional allocation in a branch is now ratified)", () => {
+    const module = compileToModule("function main(): int\n  let total = 0\n  let count = 0\n  while count < 3\n    let arr = [1, 2, 3]\n    total = total + arr[0]\n    count = count + 1\n  end\n  return total\nend\n");
+    let caught: WasmUnsupportedError | undefined;
+    try { emitWasmModule(module); } catch (e) { caught = e as WasmUnsupportedError; }
+    expect(caught !== undefined && caught.message.includes("3.1B.6")).toBe(true);
+  });
+
+  it("REJECTS: an array allocated inside a while loop's body (would re-allocate every iteration) - also deferred to 3.1B.6", () => {
+    expect(accepts("function main(): int\n  let total = 0\n  let count = 0\n  while count < 3\n    let arr = [1, 2, 3]\n    total = total + arr[0]\n    count = count + 1\n  end\n  return total\nend\n")).toBe(false);
+  });
+
+  it("MERGE_IMMEDIATE_RETURN_CONTRACT extends to array_store: an array write AFTER the merge point (before return) is still rejected, matching the existing scalar-store restriction exactly", () => {
+    expect(accepts("function main(): int\n  let arr = [0, 0, 0]\n  let x = 0\n  if 1 == 1\n    x = 10\n  else\n    x = 20\n  end\n  arr[0] = x\n  return arr[0]\nend\n")).toBe(false);
+  });
+});
+
+describe("WASM Backend - INDEPENDENT REVIEW FINDINGS (3.1B.4): cross-branch array independence, break/continue combinations, nested control flow rejection", () => {
+  // Per explicit independent review request - direct code-path verification, not description.
+
+  function accepts(src: string): boolean {
+    const module = compileToModule(src);
+    try {
+      emitWasmModule(module);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  it("POINT 3: two DIFFERENT arrays, each used in only ONE branch, resolve to their own distinct base addresses - no cross-branch leakage", async () => {
+    await assertBackendCorrectness("function main(): int\n  let arr1 = [10, 20]\n  let arr2 = [100, 200]\n  let x = 0\n  if 1 == 1\n    x = arr1[0]\n  else\n    x = arr2[0]\n  end\n  return x\nend\n", 10n);
+  });
+
+  it("POINT 3: BOTH arrays accessed in BOTH branches - confirms no address mixing even when both are live in every branch", async () => {
+    await assertBackendCorrectness("function main(): int\n  let arr1 = [10, 20]\n  let arr2 = [100, 200]\n  let x = 0\n  if 1 == 1\n    x = arr1[0] + arr2[0]\n  else\n    x = arr1[1] + arr2[1]\n  end\n  return x\nend\n", 110n);
+  });
+
+  it("[DR-RB3-01] an array access inside the return-only Diamond shape is ACCEPTED and equals C (formerly REJECTED)", async () => {
+    await expectAcceptedAndEqualToC("function main(): int\n  let arr = [10,20,30]\n  if 1 == 1\n    return arr[0]\n  else\n    return arr[1]\n  end\nend\n");
+  });
+
+  it("POINT 2: an array access (constant index) inside while+break is CLEANLY rejected - a genuinely untested combination found during independent review (neither validateWhileBreakShape nor its encoder were ever extended for arrays)", () => {
+    expect(accepts("function main(): int\n  let arr = [10,20,30]\n  let i = 0\n  while i < 100\n    if i == 3\n      break\n    end\n    arr[0] = 99\n    i = i + 1\n  end\n  return arr[0]\nend\n")).toBe(false);
+  });
+
+  it("POINT 2: an array access (constant index) inside while+continue is CLEANLY rejected - same reasoning as break", () => {
+    expect(accepts("function main(): int\n  let arr = [10,20,30]\n  let i = 0\n  let total = 0\n  while i < 10\n    i = i + 1\n    if i == 5\n      continue\n    end\n    arr[0] = total\n    total = total + i\n  end\n  return arr[0]\nend\n")).toBe(false);
+  });
+
+  it("POINT 4: NESTED CONTROL FLOW - if inside while, with array access - cleanly rejected (not crashed, not silently accepted)", () => {
+    expect(accepts("function main(): int\n  let arr = [10, 20, 30]\n  let i = 0\n  let total = 0\n  while i < 3\n    if i == 1\n      total = total + arr[0]\n    else\n      total = total + arr[1]\n    end\n    i = i + 1\n  end\n  return total\nend\n")).toBe(false);
+  });
+
+  it("POINT 4: NESTED CONTROL FLOW - while inside if, with array access - cleanly rejected", () => {
+    expect(accepts("function main(): int\n  let arr = [10, 20, 30]\n  let total = 0\n  if 1 == 1\n    let i = 0\n    while i < 3\n      total = total + arr[0]\n      i = i + 1\n    end\n  else\n    total = 99\n  end\n  return total\nend\n")).toBe(false);
+  });
+
+  it("NOTE (was 'cleanly rejected', now ACCEPTS as of WASM Layer 2 - a deliberate spec change): if inside if, with array access - the exact original motivating case. Now correctly compiles and runs (confirmed live via real WebAssembly execution in layer2-nested-if-execution.test.ts).", () => {
+    expect(accepts("function main(): int\n  let arr = [10, 20, 30]\n  let x = 0\n  if 1 == 1\n    if 2 == 2\n      x = arr[0]\n    else\n      x = arr[1]\n    end\n  else\n    x = 99\n  end\n  return x\nend\n")).toBe(true);
+  });
+
+  it("POINT 4: NESTED CONTROL FLOW - while inside while, with array access - cleanly rejected", () => {
+    expect(accepts("function main(): int\n  let arr = [10, 20, 30]\n  let total = 0\n  let i = 0\n  while i < 2\n    let j = 0\n    while j < 2\n      total = total + arr[0]\n      j = j + 1\n    end\n    i = i + 1\n  end\n  return total\nend\n")).toBe(false);
+  });
+});
+
+describe("WASM Backend 3.1B.5 - Dynamic Index Inside a Loop, Backend Correctness", () => {
+  it("DIRECTIVE'S EXACT EXAMPLE: arr[i] = x; x = arr[i] inside while - matches C Backend", async () => {
+    await assertBackendCorrectness("function main(): int\n  let arr = [0, 0, 0]\n  let i = 0\n  let x = 0\n  while i < 3\n    arr[i] = i\n    x = arr[i]\n    i = i + 1\n  end\n  return x\nend\n", 2n);
+  });
+
+  it("WRITE only, with the loop's own mutated variable as the index", async () => {
+    await assertBackendCorrectness("function main(): int\n  let arr = [0, 0, 0]\n  let i = 0\n  while i < 3\n    arr[i] = i\n    i = i + 1\n  end\n  return arr[2]\nend\n", 2n);
+  });
+
+  it("READ only, accumulating array values indexed by the loop variable", async () => {
+    await assertBackendCorrectness("function main(): int\n  let arr = [10, 20, 30]\n  let i = 0\n  let total = 0\n  while i < 3\n    total = total + arr[i]\n    i = i + 1\n  end\n  return total\nend\n", 60n);
+  });
+
+  it("a dynamic index that is a computed EXPRESSION of the loop variable (i - 1), used AFTER the loop", async () => {
+    await assertBackendCorrectness("function main(): int\n  let arr = [0, 0, 0]\n  let i = 0\n  while i < 3\n    arr[i] = i\n    i = i + 1\n  end\n  return arr[i - 1]\nend\n", 2n);
+  });
+
+  it("BOUNDARY: a loop that never iterates (condition false immediately) - array never touched inside the loop, unaffected", async () => {
+    await assertBackendCorrectness("function main(): int\n  let arr = [10, 20, 30]\n  let i = 5\n  while i < 3\n    arr[i] = 99\n    i = i + 1\n  end\n  return arr[0]\nend\n", 10n);
+  });
+
+  it("BOUNDARY: exactly one iteration", async () => {
+    await assertBackendCorrectness("function main(): int\n  let arr = [10, 20, 30]\n  let i = 0\n  while i < 1\n    arr[i] = 99\n    i = i + 1\n  end\n  return arr[0]\nend\n", 99n);
+  });
+});
+
+describe("WASM Backend - DYNAMIC_INDEX_IN_LOOP_CONTRACT (permanent regression guard, per Level 3.1B.5 directive)", () => {
+  function accepts(src: string): boolean {
+    const module = compileToModule(src);
+    try {
+      emitWasmModule(module);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  it("ACCEPTS: a dynamic (loop-variable-sourced) index inside a while loop body", () => {
+    expect(accepts("function main(): int\n  let arr = [0, 0, 0]\n  let i = 0\n  while i < 3\n    arr[i] = i\n    i = i + 1\n  end\n  return arr[2]\nend\n")).toBe(true);
+  });
+
+  it("CRITICAL: bounds checking re-evaluates CORRECTLY on every iteration, not just once - a dynamic index that goes out of bounds MID-LOOP correctly traps at the exact iteration it becomes invalid", async () => {
+    const module = compileToModule("function main(): int\n  let arr = [0, 0, 0]\n  let i = 0\n  while i < 5\n    arr[i] = i\n    i = i + 1\n  end\n  return arr[0]\nend\n");
+    const bytes = emitWasmModule(module);
+    expect(WebAssembly.validate(bytes)).toBe(true);
+    const { instance } = await WebAssembly.instantiate(bytes);
+    let trapped = false;
+    try {
+      (instance.exports.main as () => bigint)();
+    } catch (e) {
+      trapped = e instanceof WebAssembly.RuntimeError;
+    }
+    expect(trapped).toBe(true);
+  });
+
+  it("[DR-RB3-01] conditional allocation in one if/else branch is ACCEPTED and equals C (formerly listed as out of scope)", async () => {
+    await expectAcceptedAndEqualToC("function main(): int\n  let x = 0\n  if 1 == 1\n    let arr = [10, 20, 30]\n    x = arr[0]\n  else\n    x = 99\n  end\n  return x\nend\n");
+  });
+
+  it("REJECTS (out of scope, unaffected by this fix): an array allocated repeatedly inside a while loop's body", () => {
+    expect(accepts("function main(): int\n  let total = 0\n  let count = 0\n  while count < 3\n    let arr = [1, 2, 3]\n    total = total + arr[0]\n    count = count + 1\n  end\n  return total\nend\n")).toBe(false);
+  });
+
+  it("REJECTS (out of scope, unaffected by this fix): nested control flow (if inside while) with an array access", () => {
+    expect(accepts("function main(): int\n  let arr = [10, 20, 30]\n  let i = 0\n  let total = 0\n  while i < 3\n    if i == 1\n      total = total + arr[0]\n    else\n      total = total + arr[1]\n    end\n    i = i + 1\n  end\n  return total\nend\n")).toBe(false);
+  });
+
+  it("REJECTS (out of scope, unaffected by this fix): array access inside while+break", () => {
+    expect(accepts("function main(): int\n  let arr = [10,20,30]\n  let i = 0\n  while i < 100\n    if i == 3\n      break\n    end\n    arr[i] = 99\n    i = i + 1\n  end\n  return arr[0]\nend\n")).toBe(false);
+  });
+
+  it("REJECTS (out of scope, unaffected by this fix): array access inside while+continue", () => {
+    expect(accepts("function main(): int\n  let arr = [10,20,30]\n  let i = 0\n  let total = 0\n  while i < 10\n    i = i + 1\n    if i == 5\n      continue\n    end\n    arr[0] = i\n    total = total + i\n  end\n  return arr[0]\nend\n")).toBe(false);
+  });
+});
+
+describe("WASM Backend - ARRAY_SINGLE_ALLOCATION_CONTRACT (CRITICAL permanent regression guard, per issues/CRITICAL-array-reallocated-every-loop-iteration.md - found during a from-scratch adversarial review of the frozen RC1 baseline)", () => {
+  // This contract specifically distinguishes "writes the same value repeatedly" or
+  // "only reads the LAST index written" (which masked this bug in every prior test)
+  // from genuinely reading an EARLY index after LATER iterations have run - the only
+  // way this bug's effect becomes observable.
+
+  it("CRITICAL: an array element written in the FIRST loop iteration survives correctly after LATER iterations write to DIFFERENT indices - this is the exact scenario that exposed silent re-allocation", async () => {
+    await assertBackendCorrectness("function main(): int\n  let arr = [0, 0, 0]\n  let i = 0\n  while i < 3\n    arr[i] = i + 100\n    i = i + 1\n  end\n  return arr[0]\nend\n", 100n);
+  });
+
+  it("CRITICAL: the SECOND index written also survives correctly, not just the first", async () => {
+    await assertBackendCorrectness("function main(): int\n  let arr = [0, 0, 0]\n  let i = 0\n  while i < 3\n    arr[i] = i + 100\n    i = i + 1\n  end\n  return arr[1]\nend\n", 101n);
+  });
+
+  it("CRITICAL: summing ALL elements after the loop confirms every single iteration's write persisted, not just the most recent one", async () => {
+    await assertBackendCorrectness("function main(): int\n  let arr = [0, 0, 0]\n  let i = 0\n  while i < 3\n    arr[i] = i + 10\n    i = i + 1\n  end\n  return arr[0] + arr[1] + arr[2]\nend\n", 33n);
+  });
+
+  it("CRITICAL: the exact same pattern inside if/else (Merge shape) - multiple array writes within the same branch must all persist", async () => {
+    await assertBackendCorrectness("function main(): int\n  let arr = [0, 0, 0]\n  if 1 == 1\n    arr[0] = 100\n    arr[1] = 101\n  else\n    arr[0] = 200\n  end\n  return arr[0] + arr[1]\nend\n", 201n);
+  });
+
+  it("the allocation sequence (global.set, advancing the bump pointer) appears EXACTLY ONCE in the emitted bytecode for a while-loop-with-array-write, confirmed by direct byte inspection, not merely by the observable result", async () => {
+    const module = compileToModule("function main(): int\n  let arr = [0, 0, 0]\n  let i = 0\n  while i < 3\n    arr[i] = i\n    i = i + 1\n  end\n  return arr[0]\nend\n");
+    const bytes = emitWasmModule(module);
+    let sectionStart = 8;
+    let codeBytes: Uint8Array | undefined;
+    while (sectionStart < bytes.length) {
+      const sectionId = bytes[sectionStart];
+      let j = sectionStart + 1, length = 0, shift = 0, b: number;
+      do { b = bytes[j]!; length |= (b & 0x7f) << shift; shift += 7; j++; } while (b & 0x80);
+      if (sectionId === 10) codeBytes = bytes.slice(j, j + length);
+      sectionStart = j + length;
+    }
+    expect(codeBytes).toBeDefined();
+    const globalSetCount = codeBytes ? Array.from(codeBytes).filter(b => b === 0x24).length : -1;
+    expect(globalSetCount).toBe(1);
+  });
+});
+
+describe("WASM Backend - FINAL DIRECTIVE FIXES: cross-block reference, triple evaluation, single-element array", () => {
+  it("FIXED: a never-reassigned variable referenced inside a while loop body no longer crashes (issues/cross-block-reference-never-reassigned-variable-bug.md)", async () => {
+    await assertBackendCorrectness("function main(): int\n  let k = 5\n  let count = 0\n  let total = 0\n  while count < 3\n    total = total + k\n    count = count + 1\n  end\n  return total\nend\n", 15n);
+  });
+
+  it("FIXED: the same pattern inside if/else (Merge shape) also no longer crashes", async () => {
+    await assertBackendCorrectness("function main(): int\n  let k = 7\n  let x = 0\n  if 1 == 1\n    x = k + 1\n  else\n    x = k + 2\n  end\n  return x\nend\n", 8n);
+  });
+
+  it("FIXED: an array index expression with a function call is evaluated exactly once, not three times (issues/triple-evaluation-of-array-index-expression.md)", async () => {
+    const module = compileToModule("function f(): int\n  return 1\nend\nfunction main(): int\n  let arr = [10, 20, 30]\n  return arr[f()]\nend\n");
+    const bytes = emitWasmModule(module);
+    let sectionStart = 8;
+    let codeBytes: Uint8Array | undefined;
+    while (sectionStart < bytes.length) {
+      const sectionId = bytes[sectionStart];
+      let j = sectionStart + 1, length = 0, shift = 0, b: number;
+      do { b = bytes[j]!; length |= (b & 0x7f) << shift; shift += 7; j++; } while (b & 0x80);
+      if (sectionId === 10) codeBytes = bytes.slice(j, j + length);
+      sectionStart = j + length;
+    }
+    let callCount = 0;
+    if (codeBytes) for (let k = 0; k < codeBytes.length - 1; k++) if (codeBytes[k] === 0x10 && codeBytes[k + 1] === 0x00) callCount++;
+    expect(callCount).toBe(1);
+    const { instance } = await WebAssembly.instantiate(bytes);
+    expect((instance.exports.main as () => bigint)()).toBe(20n);
+  });
+
+  it("FIXED: a genuine one-element array (length === 1) is correctly declared as an array, not a scalar (issues/level-2.8-single-element-array-c-backend-bug.md)", async () => {
+    await assertBackendCorrectness("function main(): int\n  let arr = [99]\n  return arr[0]\nend\n", 99n);
+  });
+});
+
+describe("WASM Backend - LANGUAGE FREEZE FIXES: byte type support", () => {
+  it("FIXED: `byte` is now a recognized Tier 1 type, usable as a function return type and variable declaration, on both backends (SPEC_IMPLEMENTATION_MATRIX.md `byte` finding, Implement resolution)", async () => {
+    await assertBackendCorrectness("function main(): byte\n  let x: byte = 200\n  return x\nend\n", 200n);
+  });
+});
+
+describe("WASM Backend - STAGE 4 FIX: SSA materialization for store values (issues/wasm-loop-local-let-affecting-outer-state.md)", () => {
+  it("FIXED: the exact minimal reproducer (2 outer vars via a shared loop-local let) now returns the correct result", async () => {
+    await assertBackendCorrectness("function main(): int\n  let a = 0\n  let b = 1\n  let i = 0\n  while i < 2\n    let temp = a + b\n    a = b\n    b = temp\n    i = i + 1\n  end\n  return a\nend\n", 1n);
+  });
+
+  it("FIXED: the full examples/fibonacci.ur (10 iterations) now returns the correct 10th Fibonacci number on WASM", async () => {
+    await assertBackendCorrectness("function main(): int\n  let a = 0\n  let b = 1\n  let i = 0\n  while i < 10\n    let temp = a + b\n    a = b\n    b = temp\n    i = i + 1\n  end\n  return a\nend\n", 55n);
+  });
+
+  it("FIXED: a more complex variant (3 outer vars, 2 shared loop-local temps in the same iteration) — extends confidence beyond the single originally-confirmed reproducer", async () => {
+    await assertBackendCorrectness("function main(): int\n  let a = 1\n  let b = 2\n  let c = 3\n  let i = 0\n  while i < 3\n    let t1 = a + b\n    let t2 = b + c\n    a = b\n    b = c\n    c = t1 + t2\n    i = i + 1\n  end\n  return c\nend\n", 35n);
+  });
+
+});

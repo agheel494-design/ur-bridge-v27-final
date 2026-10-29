@@ -1,0 +1,71 @@
+name: CI
+
+# Item 5 redesign: a SINGLE job per OS, with SEQUENTIAL steps in the
+# exact requested order (Build -> Tests -> Golden -> Conformance ->
+# Examples). GitHub Actions' own default behavior for steps within one
+# job is: a failing step stops all LATER steps in that job
+# immediately (true fail-fast) — this replaces the prior design's 5
+# PARALLEL jobs, which did not fail-fast relative to each other (a
+# failure in one job did not stop the others already running).
+#
+# Any job failure still blocks merge via GitHub's own required-status-
+# check mechanism (must be enabled once in the repository's branch
+# protection settings — this workflow file alone makes the checks
+# available; enabling them as REQUIRED for merge is a repository-
+# settings action outside this file's own scope).
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master, develop]
+
+jobs:
+  verify:
+    name: Verify (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false  # let both OS's own runs complete independently, so a Windows failure doesn't hide/cancel the Linux result (and vice versa) — each OS's own STEPS still fail-fast internally, per the job design below
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        # macOS: prepared for later, per explicit instruction — NOT
+        # enabled yet. Uncomment when ready:
+        # os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install dependencies
+        run: npm install
+
+      # Step 1: Build
+      - name: Build (TypeScript)
+        run: npx tsc --noEmit -p tsconfig.json
+
+      # Step 2: All Tests
+      - name: Full Test Suite
+        run: npx vitest run
+
+      # Step 3: Golden Tests
+      - name: Golden Tests — WASM Backend
+        run: npx vitest run tests/backend/wasm/golden/golden.test.ts
+      - name: Golden Tests — codegen
+        run: npx vitest run tests/codegen/golden/golden.test.ts
+      - name: Golden Tests — optimizer
+        run: npx vitest run tests/optimizer/golden/golden.test.ts
+
+      # Step 4: Conformance
+      - name: Conformance Suite
+        run: npm run conformance
+
+      # Step 5: Examples
+      - name: Official Examples
+        run: npx vitest run tests/examples.test.ts
+
+      # Each step above runs only if the previous one succeeded —
+      # GitHub Actions' own default step behavior. No `continue-on-
+      # error` is set anywhere in this job, so the first failing step
+      # stops the remaining steps in that OS's own run immediately.

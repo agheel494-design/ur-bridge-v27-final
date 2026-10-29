@@ -1,0 +1,241 @@
+{
+  "moduleName": "09-print-builtin",
+  "functions": [
+    {
+      "qualifiedName": "ur_09_print_builtin_main",
+      "sourceName": "main",
+      "params": [],
+      "returnType": "i64",
+      "blocks": [
+        {
+          "id": 0,
+          "label": "entry",
+          "instructions": [
+            {
+              "kind": "const",
+              "id": 0,
+              "type": "i64",
+              "value": {
+                "kind": "const_int",
+                "value": "42n"
+              },
+              "location": {
+                "file": "program.ur",
+                "start": {
+                  "line": 2,
+                  "column": 9
+                },
+                "end": {
+                  "line": 2,
+                  "column": 10
+                }
+              }
+            },
+            {
+              "kind": "call",
+              "id": 1,
+              "type": "void",
+              "callee": "ur_print_int",
+              "args": [
+                {
+                  "id": 0
+                }
+              ],
+              "location": {
+                "file": "program.ur",
+                "start": {
+                  "line": 2,
+                  "column": 3
+                },
+                "end": {
+                  "line": 2,
+                  "column": 11
+                }
+              }
+            },
+            {
+              "kind": "const",
+              "id": 2,
+              "type": "bool",
+              "value": {
+                "kind": "const_bool",
+                "value": true
+              },
+              "location": {
+                "file": "program.ur",
+                "start": {
+                  "line": 3,
+                  "column": 9
+                },
+                "end": {
+                  "line": 3,
+                  "column": 12
+                }
+              }
+            },
+            {
+              "kind": "call",
+              "id": 3,
+              "type": "void",
+              "callee": "ur_print_bool",
+              "args": [
+                {
+                  "id": 2
+                }
+              ],
+              "location": {
+                "file": "program.ur",
+                "start": {
+                  "line": 3,
+                  "column": 3
+                },
+                "end": {
+                  "line": 3,
+                  "column": 13
+                }
+              }
+            },
+            {
+              "kind": "const",
+              "id": 4,
+              "type": "i64",
+              "value": {
+                "kind": "const_int",
+                "value": "0n"
+              },
+              "location": {
+                "file": "program.ur",
+                "start": {
+                  "line": 4,
+                  "column": 10
+                },
+                "end": {
+                  "line": 4,
+                  "column": 10
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "kind": "return",
+            "value": {
+              "id": 4
+            },
+            "location": {
+              "file": "program.ur",
+              "start": {
+                "line": 4,
+                "column": 3
+              },
+              "end": {
+                "line": 4,
+                "column": 10
+              }
+            }
+          }
+        }
+      ],
+      "entryBlock": 0,
+      "location": {
+        "file": "program.ur",
+        "start": {
+          "line": 1,
+          "column": 1
+        },
+        "end": {
+          "line": 5,
+          "column": 3
+        }
+      },
+      "locals": []
+    }
+  ],
+  "externs": [
+    {
+      "name": "ur_runtime_init",
+      "returnType": "void",
+      "parameterTypes": [
+        "i64"
+      ],
+      "callingConvention": "c",
+      "kind": "runtime",
+      "lifecycleRole": "init"
+    },
+    {
+      "name": "ur_runtime_shutdown",
+      "returnType": "void",
+      "parameterTypes": [],
+      "callingConvention": "c",
+      "kind": "runtime",
+      "lifecycleRole": "shutdown"
+    },
+    {
+      "name": "ur_print_int",
+      "returnType": "void",
+      "parameterTypes": [
+        "i64"
+      ],
+      "callingConvention": "c",
+      "kind": "runtime",
+      "lifecycleRole": "none"
+    },
+    {
+      "name": "ur_print_float",
+      "returnType": "void",
+      "parameterTypes": [
+        "f64"
+      ],
+      "callingConvention": "c",
+      "kind": "runtime",
+      "lifecycleRole": "none"
+    },
+    {
+      "name": "ur_print_bool",
+      "returnType": "void",
+      "parameterTypes": [
+        "bool"
+      ],
+      "callingConvention": "c",
+      "kind": "runtime",
+      "lifecycleRole": "none"
+    },
+    {
+      "name": "ur_print_string",
+      "returnType": "void",
+      "parameterTypes": [
+        "string"
+      ],
+      "callingConvention": "c",
+      "kind": "runtime",
+      "lifecycleRole": "none"
+    },
+    {
+      "name": "ur_input_string",
+      "returnType": "string",
+      "parameterTypes": [],
+      "callingConvention": "c",
+      "kind": "runtime",
+      "lifecycleRole": "none"
+    },
+    {
+      "name": "ur_free",
+      "returnType": "void",
+      "parameterTypes": [
+        "string"
+      ],
+      "callingConvention": "c",
+      "kind": "runtime",
+      "lifecycleRole": "none"
+    },
+    {
+      "name": "ur_panic",
+      "returnType": "void",
+      "parameterTypes": [
+        "string"
+      ],
+      "callingConvention": "c",
+      "kind": "runtime",
+      "lifecycleRole": "none"
+    }
+  ]
+}

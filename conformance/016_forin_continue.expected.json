@@ -1,0 +1,23 @@
+{
+  "name": "016_forin_continue",
+  "parseDiagnostics": [],
+  "typecheckDiagnostics": [],
+  "lowerOk": true,
+  "lowerDiagnostics": [],
+  "irSummary": {
+    "functionCount": 1,
+    "instructionKindCounts": {
+      "const": 14,
+      "array_store": 5,
+      "store": 4,
+      "array_length": 1,
+      "load": 5,
+      "binop": 4,
+      "array_load": 1
+    }
+  },
+  "cCompiles": true,
+  "cRuntimeExitCode": 12,
+  "wasmAccepted": false,
+  "wasmRejectionMessage": "[WASM1002] unsupported CFG shape (found 8 blocks) — only single-block, 3-block Diamond (Invariant 3.1A.4), 4-block Diamond+Merge (Invariant 3.1A.5), or a valid nested-if structure are supported yet"
+}

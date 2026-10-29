@@ -1,0 +1,20 @@
+{
+  "name": "004_while",
+  "parseDiagnostics": [],
+  "typecheckDiagnostics": [],
+  "lowerOk": true,
+  "lowerDiagnostics": [],
+  "irSummary": {
+    "functionCount": 1,
+    "instructionKindCounts": {
+      "const": 4,
+      "store": 4,
+      "load": 5,
+      "binop": 3
+    }
+  },
+  "cCompiles": true,
+  "cRuntimeExitCode": 55,
+  "wasmAccepted": true,
+  "wasmRuntimeResult": "55"
+}

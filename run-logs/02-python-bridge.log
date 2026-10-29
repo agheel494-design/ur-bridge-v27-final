@@ -1,0 +1,127 @@
+### tests/ffi/drivers/python-driver-return-values.test.ts
+
+  FFI Python Bridge Phase 2 Task 1: real function return values, no simulation
+    ✓ real Python function returning int: def f(): return 42
+    ✓ real Python function returning float: def f(): return 3.14
+    ✓ real Python function returning bool: def f(): return True
+    ✓ real Python function returning bool False
+    ✓ real Python function returning string: def f(): return 'hi'
+
+────────────────────────────────────────
+Tests:  5 total
+Passed: 5
+Failed: 0
+
+✅ All 5 tests passed
+
+### tests/ffi/drivers/python-driver-native-e2e.test.ts
+
+  FFI Python Bridge (official driver) - real libpython.so, no simulation
+    ✓ Step 1 (independent call, own process): Py_IsInitialized() alone, before any initialization - must be 0
+    ✓ Steps 2-5, real full lifecycle in ONE process (per the real process-per-call constraint discovered): Py_IsInitialized(0) -> Py_Initialize() -> Py_IsInitialized(1) -> PyRun_SimpleString("x=2+3") -> Py_FinalizeEx() -> Py_IsInitialized(0)
+    ✓ REAL, CONFIRMED LIMITATION: Python code that writes to stdout (e.g. print(...)) breaks this harness's own output-parsing protocol - documented as a known constraint, not silently worked around
+
+────────────────────────────────────────
+Tests:  3 total
+Passed: 3
+Failed: 0
+
+✅ All 3 tests passed
+
+### tests/ffi/drivers/python-driver-marshaling.test.ts
+
+  FFI Python Bridge Phase 2 Task 2: Argument Marshaling round-trips, no simulation
+
+  int
+    ✓ success: 42
+    ✓ zero (empty-equivalent)
+    ✓ large: int64 max
+    ✓ type error: non-numeric string throws a real error, not a silent -1
+
+  float
+    ✓ success: 3.14
+    ✓ zero
+    ✓ large: 1e300
+    ✓ type error: non-numeric string throws
+
+  bool
+    ✓ success: True
+    ✓ success: False
+
+  string
+    ✓ success: 'hello'
+    ✓ empty string
+    ✓ large: a long repeated string
+    ✓ KNOWN LIMITATION, disclosed: a string containing a real newline breaks this harness's own output-parsing protocol (same class of issue as print() colliding with stdout, documented in PYTHON_BRIDGE_SIGNATURES.md) - confirmed here as a real failure, not silently avoided
+
+  null
+    ✓ UR null -> Python None -> UR null: is-None check is True
+    ✓ a real, non-null value correctly reports is-None as False
+
+  list
+    ✓ success: [1, 2, 3]
+    ✓ empty list
+    ✓ large: a 1000-element list
+    ✓ type error: len() on a non-container raises a real Python TypeError, surfaced as a real thrown error
+
+  dict
+    ✓ success: {'a': 1, 'b': 2}
+    ✓ empty dict
+    ✓ large: a 500-key dict
+    ✓ type error: len() on a non-container raises a real error
+
+────────────────────────────────────────
+Tests:  24 total
+Passed: 24
+Failed: 0
+
+✅ All 24 tests passed
+
+### tests/ffi/drivers/python-driver-exceptions.test.ts
+
+  FFI Python Bridge Phase 2 Task 3: Exception Mapping, no simulation
+    ✓ ZeroDivisionError: real type and message, maps to PY0001
+    ✓ NameError: real type and message, maps to PY0002
+    ✓ TypeError: real type and message, maps to PY0003
+    ✓ ValueError: real type and message, maps to PY0004
+    ✓ ImportError family: real ModuleNotFoundError (a real, documented ImportError subclass) - maps to PY0005
+    ✓ Real confirmation: the ModuleNotFoundError above genuinely IS an ImportError, per Python's own isinstance check
+    ✓ SyntaxError (via exec(), since a raw SyntaxError happens at parse time before any outer try/except could catch it): real type and message, maps to PY0006
+    ✓ no exception: healthy code returns null, not a fabricated exception
+    ✓ unmapped exception type falls back to PY0000, not silently mis-attributed
+
+────────────────────────────────────────
+Tests:  9 total
+Passed: 9
+Failed: 0
+
+✅ All 9 tests passed
+
+### tests/ffi/drivers/python-driver-gil.test.ts
+
+  FFI Python Bridge Phase 2 Task 4: GIL - single-thread and re-entrant only (multi-thread disclosed as unachievable via this harness)
+    ✓ Stage 1: a single real PyGILState_Ensure()/PyGILState_Release() pair does not crash and leaves the interpreter alive
+    ✓ Stage 1: 1000 real, sequential Ensure/Release cycles - zero errors, interpreter still alive, no GIL leak
+    ✓ Stage 2 (Re-entrant): Ensure -> Ensure -> real Python code -> Release -> Release - no deadlock, interpreter survives, clean finalize
+    ✓ DISCLOSED, NOT ACHIEVABLE: genuine multi-thread GIL contention (Stage 3) requires this harness to generate multi-threaded C code (pthread_create or equivalent), which it does not do - confirmed by direct source inspection of harness-executor.ts, zero pthread references found. This is a real, permanent marker of the gap, not a passing test standing in for it.
+
+────────────────────────────────────────
+Tests:  4 total
+Passed: 4
+Failed: 0
+
+✅ All 4 tests passed
+
+### tests/ffi/drivers/python-driver-stability.test.ts
+
+  FFI Python Bridge Phase 2 Task 5: Long-running Stability, no simulation
+    ✓ 1000 consecutive real PyRun_SimpleString calls (each allocating/discarding a Python list) - zero errors, interpreter alive, clean finalize
+    ✓ 10000 consecutive real calls - zero errors, interpreter alive, clean finalize, AND per-call time does not increase vs. the 1000-call run (real, objective evidence against a leak degrading performance in this range)
+
+────────────────────────────────────────
+Tests:  2 total
+Passed: 2
+Failed: 0
+
+✅ All 2 tests passed
+

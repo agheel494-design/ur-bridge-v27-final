@@ -1,0 +1,148 @@
+﻿// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// UR-Bridge â€” Tests: CLI vs IDE Parity (Release Validation, Team 2 Backend QA)
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+//
+// Per explicit Release Validation directive: CLI and IDE must produce
+// IDENTICAL results for the same program. Full validation: 100 programs
+// run + 100 built through both CLI and IDE, 100/100 match on both â€”
+// documented in TEAM2_BACKEND_QA_REPORT.md. This file is a smaller,
+// fast, permanent sample (20 programs) of the same comparison for CI.
+
+import { describe, it, expect } from "vitest";
+import { spawn, spawnSync, type ChildProcess } from "child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
+import { pathToFileURL } from "url";
+
+import { existsSync } from "fs";
+
+// W-1 (RB-2): see tests/ide/ide-server.test.ts â€” tsx's JS entry run by the current node, no .cmd spawn.
+const TSX_CLI = join(process.cwd(), "node_modules", "tsx", "dist", "cli.mjs");
+// Fix-HA (H-a): the IDE server is ONE process (node + tsx's loader via --import), so that its exit can be confirmed
+// before its temporary directory is removed; see tests/ide/ide-server.test.ts. The CLI runs below are unchanged
+// (spawnSync returns only after the tsx CLI and its child have both exited).
+const TSX_LOADER_URL = pathToFileURL(join(process.cwd(), "node_modules", "tsx", "dist", "loader.mjs")).href;
+const CLI_ENTRY = join(process.cwd(), "src/cli/index.ts");
+const SERVER_ENTRY = join(process.cwd(), "src/ide/server.ts");
+
+function makeRng(seed: number) {
+  let s = seed >>> 0 || 1;
+  return { next(): number { s ^= s << 13; s ^= s >>> 17; s ^= s << 5; return (s >>> 0) / 0x100000000; },
+    int(lo: number, hi: number) { return lo + Math.floor(this.next() * (hi - lo + 1)); } };
+}
+
+function genProgram(seed: number): { src: string; label: string } {
+  const rng = makeRng(seed);
+  const kind = rng.int(0, 5);
+  switch (kind) {
+    case 0: return { src: `function main(): int\n  print(${rng.int(1, 100)} + ${rng.int(1, 100)})\n  return 0\nend\n`, label: "arithmetic" };
+    case 1: return { src: `struct Point\n  x: int\n  y: int\nend\nfunction main(): int\n  let p = Point(${rng.int(1, 50)}, ${rng.int(1, 50)})\n  print(p.x + p.y)\n  return 0\nend\n`, label: "struct" };
+    case 2: return { src: `function main(): int\n  let arr = [${rng.int(1, 9)}, ${rng.int(1, 9)}, ${rng.int(1, 9)}]\n  print(arr[1])\n  return 0\nend\n`, label: "array" };
+    case 3: return { src: `function main(): int\n  let i = 0\n  let total = 0\n  while i < ${rng.int(3, 20)}\n    total = total + i\n    i = i + 1\n  end\n  print(total)\n  return 0\nend\n`, label: "loop" };
+    case 4: return { src: `function fact(n: int): int\n  if n <= 1\n    return 1\n  end\n  return n * fact(n - 1)\nend\nfunction main(): int\n  print(fact(${rng.int(1, 8)}))\n  return 0\nend\n`, label: "recursion" };
+    default: return { src: `function main(): int\n  let x: int = "wrong_type_${seed}"\n  return 0\nend\n`, label: "type_error" };
+  }
+}
+
+async function withIdeServer<T>(fn: (baseUrl: string) => Promise<T>): Promise<T> {
+  const dir = mkdtempSync(join(tmpdir(), "parity-ide-"));
+  const port = 4600 + Math.floor(Math.random() * 300);
+  const proc = spawn(process.execPath, ["--import", TSX_LOADER_URL, SERVER_ENTRY], { cwd: dir, env: { ...process.env, UR_IDE_PORT: String(port) }, stdio: "pipe" });
+  let serverStdout = "";
+  let serverStderr = "";
+  proc.stdout?.on("data", chunk => { serverStdout += chunk.toString(); });
+  proc.stderr?.on("data", chunk => { serverStderr += chunk.toString(); });
+  proc.on("error", error => console.error("[IDE SERVER PROCESS ERROR]", error));
+  proc.on("exit", (code, signal) => console.error("[IDE SERVER EXIT]", { code, signal }));
+  const baseUrl = `http://localhost:${port}`;
+  let bodyFailed = false;
+  try {
+    for (let i = 0; i < 50; i++) {
+      try { await fetch(baseUrl + "/"); break; } catch { await new Promise(r => setTimeout(r, 100)); }
+    }
+    return await fn(baseUrl);
+  } catch (e) {
+    bodyFailed = true;
+    throw e;
+  } finally {
+    await stopServerThenRemoveDir(proc, dir, bodyFailed);
+  }
+}
+
+// Fix-HA: VERBATIM copy of stopServerThenRemoveDir from tests/ide/ide-server.test.ts (Fix-W2; its behaviour is tested
+// there). Copied, not imported: importing a *.test.ts file would also register its tests here.
+const SERVER_EXIT_TIMEOUT_MS = 10000;
+async function stopServerThenRemoveDir(
+  proc: ChildProcess, dir: string, bodyFailed: boolean,
+  opts: { timeoutMs?: number; remove?: (d: string) => void } = {},
+): Promise<void> {
+  const timeoutMs = opts.timeoutMs ?? SERVER_EXIT_TIMEOUT_MS;
+  const remove = opts.remove ?? ((d: string) => rmSync(d, { recursive: true, force: true }));
+  let cleanupError: Error | undefined;
+  const alreadyExited = proc.exitCode !== null || proc.signalCode !== null;
+  const exited = alreadyExited
+    ? Promise.resolve(true)
+    : new Promise<boolean>(resolveExit => {
+        const timer = setTimeout(() => resolveExit(false), timeoutMs);
+        proc.once("exit", () => { clearTimeout(timer); resolveExit(true); });
+      });
+  if (!alreadyExited) proc.kill();
+  if (!(await exited)) {
+    cleanupError = new Error(`IDE test server (pid ${proc.pid}) did not exit within ${timeoutMs} ms after kill(); temporary directory NOT removed: ${dir}`);
+  } else {
+    try {
+      remove(dir);
+    } catch (e) {
+      cleanupError = new Error(`removing the temporary directory failed after the server had exited: ${dir}: ${(e as Error).message}`);
+    }
+  }
+  if (cleanupError) {
+    console.error(`[ide-server.test cleanup] ${cleanupError.message}`);
+    if (!bodyFailed) throw cleanupError;
+  }
+}
+
+
+describe("CLI vs IDE â€” RUN result parity (20-program sample)", () => {
+  it("CLI and IDE produce identical run results across 20 diverse programs", async () => {
+    await withIdeServer(async (baseUrl) => {
+      let matches = 0;
+      const mismatches: string[] = [];
+      for (let seed = 1; seed <= 20; seed++) {
+        const { src, label } = genProgram(seed);
+        const fileName = `p${seed}.ur`;
+        const cliDir = mkdtempSync(join(tmpdir(), "parity-cli-"));
+        writeFileSync(join(cliDir, fileName), src, "utf-8");
+        const cliRun = spawnSync(process.execPath, [TSX_CLI, CLI_ENTRY, "run", fileName], { cwd: cliDir, encoding: "utf-8" });
+        rmSync(cliDir, { recursive: true, force: true });
+
+        console.log(`[PARITY] starting seed=${seed}, file=${fileName}`);
+        let ideRunRes: Response;
+        let ideRun: any;
+        try {
+          ideRunRes = await fetch(baseUrl + "/api/run", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ path: fileName, content: src }),
+          });
+          ideRun = await ideRunRes.json() as any;
+        } catch (error) {
+          console.error("[PARITY FETCH FAILURE]", {
+            seed, fileName, baseUrl,
+            serverStdout, serverStderr, error,
+          });
+          throw error;
+        }
+
+        const cliOk = cliRun.status === 0;
+        const ideOk = ideRun.ok && ideRun.exitCode === 0;
+        const match = cliOk === ideOk && (!cliOk || (cliRun.stdout ?? "").trim() === (ideRun.stdout || "").trim());
+        if (match) matches++;
+        else mismatches.push(`#${seed} (${label}): CLI(ok=${cliOk}) vs IDE(ok=${ideOk})`);
+      }
+      expect(mismatches).toEqual([]);
+      expect(matches).toBe(20);
+    });
+  }, 30000);
+});

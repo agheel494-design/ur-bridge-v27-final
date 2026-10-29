@@ -1,0 +1,2 @@
+CFG for main (1 block):
+  BB0 (entry) [entry] — 7 instruction(s), terminator: return

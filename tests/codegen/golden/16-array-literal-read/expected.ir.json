@@ -1,0 +1,368 @@
+{
+  "moduleName": "16-array-literal-read",
+  "functions": [
+    {
+      "qualifiedName": "ur_16_array_literal_read_main",
+      "sourceName": "main",
+      "params": [],
+      "returnType": "i64",
+      "blocks": [
+        {
+          "id": 0,
+          "label": "entry",
+          "instructions": [
+            {
+              "kind": "const",
+              "id": 0,
+              "type": "i64",
+              "value": {
+                "kind": "const_int",
+                "value": "10n"
+              },
+              "location": {
+                "file": "program.ur",
+                "start": {
+                  "line": 2,
+                  "column": 14
+                },
+                "end": {
+                  "line": 2,
+                  "column": 15
+                }
+              }
+            },
+            {
+              "kind": "const",
+              "id": 1,
+              "type": "i64",
+              "value": {
+                "kind": "const_int",
+                "value": "20n"
+              },
+              "location": {
+                "file": "program.ur",
+                "start": {
+                  "line": 2,
+                  "column": 18
+                },
+                "end": {
+                  "line": 2,
+                  "column": 19
+                }
+              }
+            },
+            {
+              "kind": "const",
+              "id": 2,
+              "type": "i64",
+              "value": {
+                "kind": "const_int",
+                "value": "30n"
+              },
+              "location": {
+                "file": "program.ur",
+                "start": {
+                  "line": 2,
+                  "column": 22
+                },
+                "end": {
+                  "line": 2,
+                  "column": 23
+                }
+              }
+            },
+            {
+              "kind": "const",
+              "id": 3,
+              "type": "i64",
+              "value": {
+                "kind": "const_int",
+                "value": "0n"
+              },
+              "location": {
+                "file": "program.ur",
+                "start": {
+                  "line": 2,
+                  "column": 3
+                },
+                "end": {
+                  "line": 2,
+                  "column": 24
+                }
+              }
+            },
+            {
+              "kind": "array_store",
+              "slot": 0,
+              "index": {
+                "id": 3
+              },
+              "value": {
+                "id": 0
+              },
+              "location": {
+                "file": "program.ur",
+                "start": {
+                  "line": 2,
+                  "column": 3
+                },
+                "end": {
+                  "line": 2,
+                  "column": 24
+                }
+              }
+            },
+            {
+              "kind": "const",
+              "id": 4,
+              "type": "i64",
+              "value": {
+                "kind": "const_int",
+                "value": "1n"
+              },
+              "location": {
+                "file": "program.ur",
+                "start": {
+                  "line": 2,
+                  "column": 3
+                },
+                "end": {
+                  "line": 2,
+                  "column": 24
+                }
+              }
+            },
+            {
+              "kind": "array_store",
+              "slot": 0,
+              "index": {
+                "id": 4
+              },
+              "value": {
+                "id": 1
+              },
+              "location": {
+                "file": "program.ur",
+                "start": {
+                  "line": 2,
+                  "column": 3
+                },
+                "end": {
+                  "line": 2,
+                  "column": 24
+                }
+              }
+            },
+            {
+              "kind": "const",
+              "id": 5,
+              "type": "i64",
+              "value": {
+                "kind": "const_int",
+                "value": "2n"
+              },
+              "location": {
+                "file": "program.ur",
+                "start": {
+                  "line": 2,
+                  "column": 3
+                },
+                "end": {
+                  "line": 2,
+                  "column": 24
+                }
+              }
+            },
+            {
+              "kind": "array_store",
+              "slot": 0,
+              "index": {
+                "id": 5
+              },
+              "value": {
+                "id": 2
+              },
+              "location": {
+                "file": "program.ur",
+                "start": {
+                  "line": 2,
+                  "column": 3
+                },
+                "end": {
+                  "line": 2,
+                  "column": 24
+                }
+              }
+            },
+            {
+              "kind": "const",
+              "id": 6,
+              "type": "i64",
+              "value": {
+                "kind": "const_int",
+                "value": "1n"
+              },
+              "location": {
+                "file": "program.ur",
+                "start": {
+                  "line": 3,
+                  "column": 14
+                },
+                "end": {
+                  "line": 3,
+                  "column": 14
+                }
+              }
+            },
+            {
+              "kind": "array_load",
+              "id": 7,
+              "type": "i64",
+              "slot": 0,
+              "index": {
+                "id": 6
+              },
+              "location": {
+                "file": "program.ur",
+                "start": {
+                  "line": 3,
+                  "column": 10
+                },
+                "end": {
+                  "line": 3,
+                  "column": 15
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "kind": "return",
+            "value": {
+              "id": 7
+            },
+            "location": {
+              "file": "program.ur",
+              "start": {
+                "line": 3,
+                "column": 3
+              },
+              "end": {
+                "line": 3,
+                "column": 15
+              }
+            }
+          }
+        }
+      ],
+      "entryBlock": 0,
+      "location": {
+        "file": "program.ur",
+        "start": {
+          "line": 1,
+          "column": 1
+        },
+        "end": {
+          "line": 4,
+          "column": 3
+        }
+      },
+      "locals": [
+        {
+          "id": 0,
+          "name": "arr",
+          "type": "i64",
+          "length": 3,
+          "isArray": true
+        }
+      ]
+    }
+  ],
+  "externs": [
+    {
+      "name": "ur_runtime_init",
+      "returnType": "void",
+      "parameterTypes": [
+        "i64"
+      ],
+      "callingConvention": "c",
+      "kind": "runtime",
+      "lifecycleRole": "init"
+    },
+    {
+      "name": "ur_runtime_shutdown",
+      "returnType": "void",
+      "parameterTypes": [],
+      "callingConvention": "c",
+      "kind": "runtime",
+      "lifecycleRole": "shutdown"
+    },
+    {
+      "name": "ur_print_int",
+      "returnType": "void",
+      "parameterTypes": [
+        "i64"
+      ],
+      "callingConvention": "c",
+      "kind": "runtime",
+      "lifecycleRole": "none"
+    },
+    {
+      "name": "ur_print_float",
+      "returnType": "void",
+      "parameterTypes": [
+        "f64"
+      ],
+      "callingConvention": "c",
+      "kind": "runtime",
+      "lifecycleRole": "none"
+    },
+    {
+      "name": "ur_print_bool",
+      "returnType": "void",
+      "parameterTypes": [
+        "bool"
+      ],
+      "callingConvention": "c",
+      "kind": "runtime",
+      "lifecycleRole": "none"
+    },
+    {
+      "name": "ur_print_string",
+      "returnType": "void",
+      "parameterTypes": [
+        "string"
+      ],
+      "callingConvention": "c",
+      "kind": "runtime",
+      "lifecycleRole": "none"
+    },
+    {
+      "name": "ur_input_string",
+      "returnType": "string",
+      "parameterTypes": [],
+      "callingConvention": "c",
+      "kind": "runtime",
+      "lifecycleRole": "none"
+    },
+    {
+      "name": "ur_free",
+      "returnType": "void",
+      "parameterTypes": [
+        "string"
+      ],
+      "callingConvention": "c",
+      "kind": "runtime",
+      "lifecycleRole": "none"
+    },
+    {
+      "name": "ur_panic",
+      "returnType": "void",
+      "parameterTypes": [
+        "string"
+      ],
+      "callingConvention": "c",
+      "kind": "runtime",
+      "lifecycleRole": "none"
+    }
+  ]
+}

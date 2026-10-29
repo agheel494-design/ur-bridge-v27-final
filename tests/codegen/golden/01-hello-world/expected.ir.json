@@ -1,0 +1,157 @@
+{
+  "moduleName": "01-hello-world",
+  "functions": [
+    {
+      "qualifiedName": "ur_01_hello_world_main",
+      "sourceName": "main",
+      "params": [],
+      "returnType": "i64",
+      "blocks": [
+        {
+          "id": 0,
+          "label": "entry",
+          "instructions": [
+            {
+              "kind": "const",
+              "id": 0,
+              "type": "i64",
+              "value": {
+                "kind": "const_int",
+                "value": "42n"
+              },
+              "location": {
+                "file": "program.ur",
+                "start": {
+                  "line": 2,
+                  "column": 10
+                },
+                "end": {
+                  "line": 2,
+                  "column": 11
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "kind": "return",
+            "value": {
+              "id": 0
+            },
+            "location": {
+              "file": "program.ur",
+              "start": {
+                "line": 2,
+                "column": 3
+              },
+              "end": {
+                "line": 2,
+                "column": 11
+              }
+            }
+          }
+        }
+      ],
+      "entryBlock": 0,
+      "location": {
+        "file": "program.ur",
+        "start": {
+          "line": 1,
+          "column": 1
+        },
+        "end": {
+          "line": 3,
+          "column": 3
+        }
+      },
+      "locals": []
+    }
+  ],
+  "externs": [
+    {
+      "name": "ur_runtime_init",
+      "returnType": "void",
+      "parameterTypes": [
+        "i64"
+      ],
+      "callingConvention": "c",
+      "kind": "runtime",
+      "lifecycleRole": "init"
+    },
+    {
+      "name": "ur_runtime_shutdown",
+      "returnType": "void",
+      "parameterTypes": [],
+      "callingConvention": "c",
+      "kind": "runtime",
+      "lifecycleRole": "shutdown"
+    },
+    {
+      "name": "ur_print_int",
+      "returnType": "void",
+      "parameterTypes": [
+        "i64"
+      ],
+      "callingConvention": "c",
+      "kind": "runtime",
+      "lifecycleRole": "none"
+    },
+    {
+      "name": "ur_print_float",
+      "returnType": "void",
+      "parameterTypes": [
+        "f64"
+      ],
+      "callingConvention": "c",
+      "kind": "runtime",
+      "lifecycleRole": "none"
+    },
+    {
+      "name": "ur_print_bool",
+      "returnType": "void",
+      "parameterTypes": [
+        "bool"
+      ],
+      "callingConvention": "c",
+      "kind": "runtime",
+      "lifecycleRole": "none"
+    },
+    {
+      "name": "ur_print_string",
+      "returnType": "void",
+      "parameterTypes": [
+        "string"
+      ],
+      "callingConvention": "c",
+      "kind": "runtime",
+      "lifecycleRole": "none"
+    },
+    {
+      "name": "ur_input_string",
+      "returnType": "string",
+      "parameterTypes": [],
+      "callingConvention": "c",
+      "kind": "runtime",
+      "lifecycleRole": "none"
+    },
+    {
+      "name": "ur_free",
+      "returnType": "void",
+      "parameterTypes": [
+        "string"
+      ],
+      "callingConvention": "c",
+      "kind": "runtime",
+      "lifecycleRole": "none"
+    },
+    {
+      "name": "ur_panic",
+      "returnType": "void",
+      "parameterTypes": [
+        "string"
+      ],
+      "callingConvention": "c",
+      "kind": "runtime",
+      "lifecycleRole": "none"
+    }
+  ]
+}

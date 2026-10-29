@@ -1,0 +1,9 @@
+CFG for main (4 blocks):
+  BB0 (entry) [entry] — 2 instruction(s), terminator: branch
+    -> BB1
+  BB1 (loop_header) — 3 instruction(s), terminator: cond_branch
+    -> BB2
+    -> BB3
+  BB2 (loop_body) — 4 instruction(s), terminator: branch
+    -> BB1
+  BB3 (loop_exit) — 1 instruction(s), terminator: return

@@ -1,0 +1,46 @@
+{
+  "name": "ur-bridge-v27",
+  "version": "27.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node tools/build.mjs",
+    "test": "vitest run",
+    "conformance": "tsx tools/run-conformance.ts",
+    "bench:ffi": "tsx tools/benchmark-ffi-bindgen.ts",
+    "bench:optimizer": "tsx tools/benchmark-optimizer.ts",
+    "bench:compiler": "tsx tools/benchmark-compiler-stages.ts",
+    "test:watch": "vitest",
+    "test:opt": "vitest run tests/optimizer",
+    "test:wasm": "vitest run tests/compiler",
+    "test:fuzz": "vitest run tests/fuzz",
+    "test:perf": "vitest run tests/performance",
+    "test:regress": "vitest run tests/regression",
+    "test:stability": "vitest run tests/stability",
+    "test:frontend": "vitest run tests/compiler/frontend",
+    "test:parser": "vitest run tests/compiler/frontend/parser.test.ts",
+    "test:lexer": "vitest run tests/compiler/frontend/lexer.test.ts",
+    "test:semantic": "vitest run tests/compiler/semantic",
+    "test:typesystem": "vitest run tests/compiler/typesystem",
+    "test:module": "vitest run tests/compiler/module",
+    "coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit",
+    "test:urpm": "vitest run tests/urpm",
+    "test:incremental": "vitest run tests/incremental",
+    "test:ffi": "vitest run tests/ffi"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "docx": "^9.0.0",
+    "typescript": "^5.4.5",
+    "vitest": "^1.6.0"
+  },
+  "dependencies": {
+    "koffi": "3.3.3",
+    "tsx": "^4.16.2"
+  },
+  "bin": {
+    "ur": "./bin/ur.mjs",
+    "ur-ide": "./bin/ur-ide.mjs"
+  }
+}

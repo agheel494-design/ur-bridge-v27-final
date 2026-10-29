@@ -1,0 +1,150 @@
+{
+  "qualifiedName": "ur_02_constant_folding_chained_main",
+  "sourceName": "main",
+  "params": [],
+  "returnType": "i64",
+  "blocks": [
+    {
+      "id": 0,
+      "label": "entry",
+      "instructions": [
+        {
+          "kind": "const",
+          "id": 0,
+          "type": "i64",
+          "value": {
+            "kind": "const_int",
+            "value": "2n"
+          },
+          "location": {
+            "file": "program.ur",
+            "start": {
+              "line": 2,
+              "column": 11
+            },
+            "end": {
+              "line": 2,
+              "column": 11
+            }
+          }
+        },
+        {
+          "kind": "const",
+          "id": 1,
+          "type": "i64",
+          "value": {
+            "kind": "const_int",
+            "value": "3n"
+          },
+          "location": {
+            "file": "program.ur",
+            "start": {
+              "line": 2,
+              "column": 15
+            },
+            "end": {
+              "line": 2,
+              "column": 15
+            }
+          }
+        },
+        {
+          "kind": "binop",
+          "id": 2,
+          "type": "i64",
+          "op": "add",
+          "left": {
+            "id": 0
+          },
+          "right": {
+            "id": 1
+          },
+          "location": {
+            "file": "program.ur",
+            "start": {
+              "line": 2,
+              "column": 11
+            },
+            "end": {
+              "line": 2,
+              "column": 15
+            }
+          }
+        },
+        {
+          "kind": "const",
+          "id": 3,
+          "type": "i64",
+          "value": {
+            "kind": "const_int",
+            "value": "4n"
+          },
+          "location": {
+            "file": "program.ur",
+            "start": {
+              "line": 2,
+              "column": 20
+            },
+            "end": {
+              "line": 2,
+              "column": 20
+            }
+          }
+        },
+        {
+          "kind": "binop",
+          "id": 4,
+          "type": "i64",
+          "op": "mul",
+          "left": {
+            "id": 2
+          },
+          "right": {
+            "id": 3
+          },
+          "location": {
+            "file": "program.ur",
+            "start": {
+              "line": 2,
+              "column": 11
+            },
+            "end": {
+              "line": 2,
+              "column": 20
+            }
+          }
+        }
+      ],
+      "terminator": {
+        "kind": "return",
+        "value": {
+          "id": 4
+        },
+        "location": {
+          "file": "program.ur",
+          "start": {
+            "line": 2,
+            "column": 3
+          },
+          "end": {
+            "line": 2,
+            "column": 20
+          }
+        }
+      }
+    }
+  ],
+  "entryBlock": 0,
+  "location": {
+    "file": "program.ur",
+    "start": {
+      "line": 1,
+      "column": 1
+    },
+    "end": {
+      "line": 3,
+      "column": 3
+    }
+  },
+  "locals": []
+}

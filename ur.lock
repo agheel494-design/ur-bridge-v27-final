@@ -1,0 +1,12 @@
+{
+  "lockfileVersion": 1,
+  "packages": {
+    "weirdversion": {
+      "name": "weirdversion",
+      "version": "not-a-real-semver-at-all",
+      "integrity": "sha256:index.ur:9da62b6951cb57d5ef75c292f7f741b72edcf66854af9acf5bedb575f1573065",
+      "resolved": "/tmp/gap011_contract/weird_version_pkg",
+      "dependencies": {}
+    }
+  }
+}

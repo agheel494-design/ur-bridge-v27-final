@@ -1,0 +1,20 @@
+
+  Import system: resolution works for all 10 languages, usage does not (real, discovered gap)
+    ✓ ar: import RESOLUTION succeeds via the real ModuleRegistry
+    ✓ en: import RESOLUTION succeeds via the real ModuleRegistry
+    ✓ fr: import RESOLUTION succeeds via the real ModuleRegistry
+    ✓ es: import RESOLUTION succeeds via the real ModuleRegistry
+    ✓ de: import RESOLUTION succeeds via the real ModuleRegistry
+    ✓ ja: import RESOLUTION succeeds via the real ModuleRegistry
+    ✓ ru: import RESOLUTION succeeds via the real ModuleRegistry
+    ✓ zh: import RESOLUTION succeeds via the real ModuleRegistry
+    ✓ pt: import RESOLUTION succeeds via the real ModuleRegistry
+    ✓ hi: import RESOLUTION succeeds via the real ModuleRegistry
+    ✓ REAL, DISCLOSED GAP: calling a function from an imported module fails at Semantic Analysis (SE1002), despite the import itself resolving successfully
+
+────────────────────────────────────────
+Tests:  11 total
+Passed: 11
+Failed: 0
+
+✅ All 11 tests passed

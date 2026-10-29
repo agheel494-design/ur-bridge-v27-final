@@ -1,0 +1,1125 @@
+{
+  "generatedFrom": "src/compiler/localization/index.ts (ALL_LANGUAGES, detectCrossLanguageCollisions) - real exports, not transcribed",
+  "languages": [
+    {
+      "code": "ar",
+      "name": "Arabic"
+    },
+    {
+      "code": "en",
+      "name": "English"
+    },
+    {
+      "code": "fr",
+      "name": "French"
+    },
+    {
+      "code": "es",
+      "name": "Spanish"
+    },
+    {
+      "code": "de",
+      "name": "German"
+    },
+    {
+      "code": "ja",
+      "name": "Japanese"
+    },
+    {
+      "code": "ru",
+      "name": "Russian"
+    },
+    {
+      "code": "zh",
+      "name": "Chinese (Simplified)"
+    },
+    {
+      "code": "pt",
+      "name": "Portuguese"
+    },
+    {
+      "code": "hi",
+      "name": "Hindi"
+    }
+  ],
+  "keywords": [
+    {
+      "surfaceWord": "دالة",
+      "canonical": "FUNCTION",
+      "languageCode": "ar",
+      "languageName": "Arabic"
+    },
+    {
+      "surfaceWord": "عرف",
+      "canonical": "LET",
+      "languageCode": "ar",
+      "languageName": "Arabic"
+    },
+    {
+      "surfaceWord": "دع",
+      "canonical": "LET",
+      "languageCode": "ar",
+      "languageName": "Arabic"
+    },
+    {
+      "surfaceWord": "نوع",
+      "canonical": "TYPE",
+      "languageCode": "ar",
+      "languageName": "Arabic"
+    },
+    {
+      "surfaceWord": "بنية",
+      "canonical": "STRUCT",
+      "languageCode": "ar",
+      "languageName": "Arabic"
+    },
+    {
+      "surfaceWord": "استورد",
+      "canonical": "IMPORT",
+      "languageCode": "ar",
+      "languageName": "Arabic"
+    },
+    {
+      "surfaceWord": "أرجع",
+      "canonical": "RETURN",
+      "languageCode": "ar",
+      "languageName": "Arabic"
+    },
+    {
+      "surfaceWord": "نهاية",
+      "canonical": "END",
+      "languageCode": "ar",
+      "languageName": "Arabic"
+    },
+    {
+      "surfaceWord": "إذا",
+      "canonical": "IF",
+      "languageCode": "ar",
+      "languageName": "Arabic"
+    },
+    {
+      "surfaceWord": "وإلا",
+      "canonical": "ELSE",
+      "languageCode": "ar",
+      "languageName": "Arabic"
+    },
+    {
+      "surfaceWord": "بينما",
+      "canonical": "WHILE",
+      "languageCode": "ar",
+      "languageName": "Arabic"
+    },
+    {
+      "surfaceWord": "طالما",
+      "canonical": "WHILE",
+      "languageCode": "ar",
+      "languageName": "Arabic"
+    },
+    {
+      "surfaceWord": "لكل",
+      "canonical": "FOR",
+      "languageCode": "ar",
+      "languageName": "Arabic"
+    },
+    {
+      "surfaceWord": "اكسر",
+      "canonical": "BREAK",
+      "languageCode": "ar",
+      "languageName": "Arabic"
+    },
+    {
+      "surfaceWord": "تابع",
+      "canonical": "CONTINUE",
+      "languageCode": "ar",
+      "languageName": "Arabic"
+    },
+    {
+      "surfaceWord": "صحيح",
+      "canonical": "TRUE",
+      "languageCode": "ar",
+      "languageName": "Arabic"
+    },
+    {
+      "surfaceWord": "خطأ",
+      "canonical": "FALSE",
+      "languageCode": "ar",
+      "languageName": "Arabic"
+    },
+    {
+      "surfaceWord": "لاشيء",
+      "canonical": "NULL",
+      "languageCode": "ar",
+      "languageName": "Arabic"
+    },
+    {
+      "surfaceWord": "في",
+      "canonical": "IN",
+      "languageCode": "ar",
+      "languageName": "Arabic"
+    },
+    {
+      "surfaceWord": "function",
+      "canonical": "FUNCTION",
+      "languageCode": "en",
+      "languageName": "English"
+    },
+    {
+      "surfaceWord": "func",
+      "canonical": "FUNCTION",
+      "languageCode": "en",
+      "languageName": "English"
+    },
+    {
+      "surfaceWord": "let",
+      "canonical": "LET",
+      "languageCode": "en",
+      "languageName": "English"
+    },
+    {
+      "surfaceWord": "var",
+      "canonical": "LET",
+      "languageCode": "en",
+      "languageName": "English"
+    },
+    {
+      "surfaceWord": "type",
+      "canonical": "TYPE",
+      "languageCode": "en",
+      "languageName": "English"
+    },
+    {
+      "surfaceWord": "struct",
+      "canonical": "STRUCT",
+      "languageCode": "en",
+      "languageName": "English"
+    },
+    {
+      "surfaceWord": "import",
+      "canonical": "IMPORT",
+      "languageCode": "en",
+      "languageName": "English"
+    },
+    {
+      "surfaceWord": "return",
+      "canonical": "RETURN",
+      "languageCode": "en",
+      "languageName": "English"
+    },
+    {
+      "surfaceWord": "end",
+      "canonical": "END",
+      "languageCode": "en",
+      "languageName": "English"
+    },
+    {
+      "surfaceWord": "if",
+      "canonical": "IF",
+      "languageCode": "en",
+      "languageName": "English"
+    },
+    {
+      "surfaceWord": "else",
+      "canonical": "ELSE",
+      "languageCode": "en",
+      "languageName": "English"
+    },
+    {
+      "surfaceWord": "while",
+      "canonical": "WHILE",
+      "languageCode": "en",
+      "languageName": "English"
+    },
+    {
+      "surfaceWord": "for",
+      "canonical": "FOR",
+      "languageCode": "en",
+      "languageName": "English"
+    },
+    {
+      "surfaceWord": "break",
+      "canonical": "BREAK",
+      "languageCode": "en",
+      "languageName": "English"
+    },
+    {
+      "surfaceWord": "continue",
+      "canonical": "CONTINUE",
+      "languageCode": "en",
+      "languageName": "English"
+    },
+    {
+      "surfaceWord": "true",
+      "canonical": "TRUE",
+      "languageCode": "en",
+      "languageName": "English"
+    },
+    {
+      "surfaceWord": "false",
+      "canonical": "FALSE",
+      "languageCode": "en",
+      "languageName": "English"
+    },
+    {
+      "surfaceWord": "null",
+      "canonical": "NULL",
+      "languageCode": "en",
+      "languageName": "English"
+    },
+    {
+      "surfaceWord": "in",
+      "canonical": "IN",
+      "languageCode": "en",
+      "languageName": "English"
+    },
+    {
+      "surfaceWord": "fonction",
+      "canonical": "FUNCTION",
+      "languageCode": "fr",
+      "languageName": "French"
+    },
+    {
+      "surfaceWord": "soit",
+      "canonical": "LET",
+      "languageCode": "fr",
+      "languageName": "French"
+    },
+    {
+      "surfaceWord": "type",
+      "canonical": "TYPE",
+      "languageCode": "fr",
+      "languageName": "French"
+    },
+    {
+      "surfaceWord": "structure",
+      "canonical": "STRUCT",
+      "languageCode": "fr",
+      "languageName": "French"
+    },
+    {
+      "surfaceWord": "importer",
+      "canonical": "IMPORT",
+      "languageCode": "fr",
+      "languageName": "French"
+    },
+    {
+      "surfaceWord": "retourner",
+      "canonical": "RETURN",
+      "languageCode": "fr",
+      "languageName": "French"
+    },
+    {
+      "surfaceWord": "fin",
+      "canonical": "END",
+      "languageCode": "fr",
+      "languageName": "French"
+    },
+    {
+      "surfaceWord": "si",
+      "canonical": "IF",
+      "languageCode": "fr",
+      "languageName": "French"
+    },
+    {
+      "surfaceWord": "sinon",
+      "canonical": "ELSE",
+      "languageCode": "fr",
+      "languageName": "French"
+    },
+    {
+      "surfaceWord": "tantque",
+      "canonical": "WHILE",
+      "languageCode": "fr",
+      "languageName": "French"
+    },
+    {
+      "surfaceWord": "pour",
+      "canonical": "FOR",
+      "languageCode": "fr",
+      "languageName": "French"
+    },
+    {
+      "surfaceWord": "arreter",
+      "canonical": "BREAK",
+      "languageCode": "fr",
+      "languageName": "French"
+    },
+    {
+      "surfaceWord": "continuer",
+      "canonical": "CONTINUE",
+      "languageCode": "fr",
+      "languageName": "French"
+    },
+    {
+      "surfaceWord": "vrai",
+      "canonical": "TRUE",
+      "languageCode": "fr",
+      "languageName": "French"
+    },
+    {
+      "surfaceWord": "faux",
+      "canonical": "FALSE",
+      "languageCode": "fr",
+      "languageName": "French"
+    },
+    {
+      "surfaceWord": "nul",
+      "canonical": "NULL",
+      "languageCode": "fr",
+      "languageName": "French"
+    },
+    {
+      "surfaceWord": "dans",
+      "canonical": "IN",
+      "languageCode": "fr",
+      "languageName": "French"
+    },
+    {
+      "surfaceWord": "funcion",
+      "canonical": "FUNCTION",
+      "languageCode": "es",
+      "languageName": "Spanish"
+    },
+    {
+      "surfaceWord": "sea",
+      "canonical": "LET",
+      "languageCode": "es",
+      "languageName": "Spanish"
+    },
+    {
+      "surfaceWord": "tipo",
+      "canonical": "TYPE",
+      "languageCode": "es",
+      "languageName": "Spanish"
+    },
+    {
+      "surfaceWord": "estructura",
+      "canonical": "STRUCT",
+      "languageCode": "es",
+      "languageName": "Spanish"
+    },
+    {
+      "surfaceWord": "importar",
+      "canonical": "IMPORT",
+      "languageCode": "es",
+      "languageName": "Spanish"
+    },
+    {
+      "surfaceWord": "retornar",
+      "canonical": "RETURN",
+      "languageCode": "es",
+      "languageName": "Spanish"
+    },
+    {
+      "surfaceWord": "fin",
+      "canonical": "END",
+      "languageCode": "es",
+      "languageName": "Spanish"
+    },
+    {
+      "surfaceWord": "si",
+      "canonical": "IF",
+      "languageCode": "es",
+      "languageName": "Spanish"
+    },
+    {
+      "surfaceWord": "sino",
+      "canonical": "ELSE",
+      "languageCode": "es",
+      "languageName": "Spanish"
+    },
+    {
+      "surfaceWord": "mientras",
+      "canonical": "WHILE",
+      "languageCode": "es",
+      "languageName": "Spanish"
+    },
+    {
+      "surfaceWord": "para",
+      "canonical": "FOR",
+      "languageCode": "es",
+      "languageName": "Spanish"
+    },
+    {
+      "surfaceWord": "romper",
+      "canonical": "BREAK",
+      "languageCode": "es",
+      "languageName": "Spanish"
+    },
+    {
+      "surfaceWord": "continuar",
+      "canonical": "CONTINUE",
+      "languageCode": "es",
+      "languageName": "Spanish"
+    },
+    {
+      "surfaceWord": "verdadero",
+      "canonical": "TRUE",
+      "languageCode": "es",
+      "languageName": "Spanish"
+    },
+    {
+      "surfaceWord": "falso",
+      "canonical": "FALSE",
+      "languageCode": "es",
+      "languageName": "Spanish"
+    },
+    {
+      "surfaceWord": "nulo",
+      "canonical": "NULL",
+      "languageCode": "es",
+      "languageName": "Spanish"
+    },
+    {
+      "surfaceWord": "en",
+      "canonical": "IN",
+      "languageCode": "es",
+      "languageName": "Spanish"
+    },
+    {
+      "surfaceWord": "funktion",
+      "canonical": "FUNCTION",
+      "languageCode": "de",
+      "languageName": "German"
+    },
+    {
+      "surfaceWord": "sei",
+      "canonical": "LET",
+      "languageCode": "de",
+      "languageName": "German"
+    },
+    {
+      "surfaceWord": "typ",
+      "canonical": "TYPE",
+      "languageCode": "de",
+      "languageName": "German"
+    },
+    {
+      "surfaceWord": "struktur",
+      "canonical": "STRUCT",
+      "languageCode": "de",
+      "languageName": "German"
+    },
+    {
+      "surfaceWord": "importieren",
+      "canonical": "IMPORT",
+      "languageCode": "de",
+      "languageName": "German"
+    },
+    {
+      "surfaceWord": "zurueckgeben",
+      "canonical": "RETURN",
+      "languageCode": "de",
+      "languageName": "German"
+    },
+    {
+      "surfaceWord": "ende",
+      "canonical": "END",
+      "languageCode": "de",
+      "languageName": "German"
+    },
+    {
+      "surfaceWord": "wenn",
+      "canonical": "IF",
+      "languageCode": "de",
+      "languageName": "German"
+    },
+    {
+      "surfaceWord": "sonst",
+      "canonical": "ELSE",
+      "languageCode": "de",
+      "languageName": "German"
+    },
+    {
+      "surfaceWord": "waehrend",
+      "canonical": "WHILE",
+      "languageCode": "de",
+      "languageName": "German"
+    },
+    {
+      "surfaceWord": "fuer",
+      "canonical": "FOR",
+      "languageCode": "de",
+      "languageName": "German"
+    },
+    {
+      "surfaceWord": "abbrechen",
+      "canonical": "BREAK",
+      "languageCode": "de",
+      "languageName": "German"
+    },
+    {
+      "surfaceWord": "weiter",
+      "canonical": "CONTINUE",
+      "languageCode": "de",
+      "languageName": "German"
+    },
+    {
+      "surfaceWord": "wahr",
+      "canonical": "TRUE",
+      "languageCode": "de",
+      "languageName": "German"
+    },
+    {
+      "surfaceWord": "falsch",
+      "canonical": "FALSE",
+      "languageCode": "de",
+      "languageName": "German"
+    },
+    {
+      "surfaceWord": "null",
+      "canonical": "NULL",
+      "languageCode": "de",
+      "languageName": "German"
+    },
+    {
+      "surfaceWord": "in",
+      "canonical": "IN",
+      "languageCode": "de",
+      "languageName": "German"
+    },
+    {
+      "surfaceWord": "関数",
+      "canonical": "FUNCTION",
+      "languageCode": "ja",
+      "languageName": "Japanese"
+    },
+    {
+      "surfaceWord": "レット",
+      "canonical": "LET",
+      "languageCode": "ja",
+      "languageName": "Japanese"
+    },
+    {
+      "surfaceWord": "型",
+      "canonical": "TYPE",
+      "languageCode": "ja",
+      "languageName": "Japanese"
+    },
+    {
+      "surfaceWord": "構造体",
+      "canonical": "STRUCT",
+      "languageCode": "ja",
+      "languageName": "Japanese"
+    },
+    {
+      "surfaceWord": "インポート",
+      "canonical": "IMPORT",
+      "languageCode": "ja",
+      "languageName": "Japanese"
+    },
+    {
+      "surfaceWord": "返す",
+      "canonical": "RETURN",
+      "languageCode": "ja",
+      "languageName": "Japanese"
+    },
+    {
+      "surfaceWord": "終了",
+      "canonical": "END",
+      "languageCode": "ja",
+      "languageName": "Japanese"
+    },
+    {
+      "surfaceWord": "もし",
+      "canonical": "IF",
+      "languageCode": "ja",
+      "languageName": "Japanese"
+    },
+    {
+      "surfaceWord": "違えば",
+      "canonical": "ELSE",
+      "languageCode": "ja",
+      "languageName": "Japanese"
+    },
+    {
+      "surfaceWord": "ながら",
+      "canonical": "WHILE",
+      "languageCode": "ja",
+      "languageName": "Japanese"
+    },
+    {
+      "surfaceWord": "繰り返す",
+      "canonical": "FOR",
+      "languageCode": "ja",
+      "languageName": "Japanese"
+    },
+    {
+      "surfaceWord": "中断",
+      "canonical": "BREAK",
+      "languageCode": "ja",
+      "languageName": "Japanese"
+    },
+    {
+      "surfaceWord": "続行",
+      "canonical": "CONTINUE",
+      "languageCode": "ja",
+      "languageName": "Japanese"
+    },
+    {
+      "surfaceWord": "真",
+      "canonical": "TRUE",
+      "languageCode": "ja",
+      "languageName": "Japanese"
+    },
+    {
+      "surfaceWord": "偽",
+      "canonical": "FALSE",
+      "languageCode": "ja",
+      "languageName": "Japanese"
+    },
+    {
+      "surfaceWord": "無",
+      "canonical": "NULL",
+      "languageCode": "ja",
+      "languageName": "Japanese"
+    },
+    {
+      "surfaceWord": "内",
+      "canonical": "IN",
+      "languageCode": "ja",
+      "languageName": "Japanese"
+    },
+    {
+      "surfaceWord": "функция",
+      "canonical": "FUNCTION",
+      "languageCode": "ru",
+      "languageName": "Russian"
+    },
+    {
+      "surfaceWord": "пусть",
+      "canonical": "LET",
+      "languageCode": "ru",
+      "languageName": "Russian"
+    },
+    {
+      "surfaceWord": "тип",
+      "canonical": "TYPE",
+      "languageCode": "ru",
+      "languageName": "Russian"
+    },
+    {
+      "surfaceWord": "структура",
+      "canonical": "STRUCT",
+      "languageCode": "ru",
+      "languageName": "Russian"
+    },
+    {
+      "surfaceWord": "импорт",
+      "canonical": "IMPORT",
+      "languageCode": "ru",
+      "languageName": "Russian"
+    },
+    {
+      "surfaceWord": "вернуть",
+      "canonical": "RETURN",
+      "languageCode": "ru",
+      "languageName": "Russian"
+    },
+    {
+      "surfaceWord": "конец",
+      "canonical": "END",
+      "languageCode": "ru",
+      "languageName": "Russian"
+    },
+    {
+      "surfaceWord": "если",
+      "canonical": "IF",
+      "languageCode": "ru",
+      "languageName": "Russian"
+    },
+    {
+      "surfaceWord": "иначе",
+      "canonical": "ELSE",
+      "languageCode": "ru",
+      "languageName": "Russian"
+    },
+    {
+      "surfaceWord": "пока",
+      "canonical": "WHILE",
+      "languageCode": "ru",
+      "languageName": "Russian"
+    },
+    {
+      "surfaceWord": "для",
+      "canonical": "FOR",
+      "languageCode": "ru",
+      "languageName": "Russian"
+    },
+    {
+      "surfaceWord": "прервать",
+      "canonical": "BREAK",
+      "languageCode": "ru",
+      "languageName": "Russian"
+    },
+    {
+      "surfaceWord": "продолжить",
+      "canonical": "CONTINUE",
+      "languageCode": "ru",
+      "languageName": "Russian"
+    },
+    {
+      "surfaceWord": "истина",
+      "canonical": "TRUE",
+      "languageCode": "ru",
+      "languageName": "Russian"
+    },
+    {
+      "surfaceWord": "ложь",
+      "canonical": "FALSE",
+      "languageCode": "ru",
+      "languageName": "Russian"
+    },
+    {
+      "surfaceWord": "нуль",
+      "canonical": "NULL",
+      "languageCode": "ru",
+      "languageName": "Russian"
+    },
+    {
+      "surfaceWord": "в",
+      "canonical": "IN",
+      "languageCode": "ru",
+      "languageName": "Russian"
+    },
+    {
+      "surfaceWord": "函数",
+      "canonical": "FUNCTION",
+      "languageCode": "zh",
+      "languageName": "Chinese (Simplified)"
+    },
+    {
+      "surfaceWord": "设",
+      "canonical": "LET",
+      "languageCode": "zh",
+      "languageName": "Chinese (Simplified)"
+    },
+    {
+      "surfaceWord": "类型",
+      "canonical": "TYPE",
+      "languageCode": "zh",
+      "languageName": "Chinese (Simplified)"
+    },
+    {
+      "surfaceWord": "结构",
+      "canonical": "STRUCT",
+      "languageCode": "zh",
+      "languageName": "Chinese (Simplified)"
+    },
+    {
+      "surfaceWord": "导入",
+      "canonical": "IMPORT",
+      "languageCode": "zh",
+      "languageName": "Chinese (Simplified)"
+    },
+    {
+      "surfaceWord": "返回",
+      "canonical": "RETURN",
+      "languageCode": "zh",
+      "languageName": "Chinese (Simplified)"
+    },
+    {
+      "surfaceWord": "结束",
+      "canonical": "END",
+      "languageCode": "zh",
+      "languageName": "Chinese (Simplified)"
+    },
+    {
+      "surfaceWord": "如果",
+      "canonical": "IF",
+      "languageCode": "zh",
+      "languageName": "Chinese (Simplified)"
+    },
+    {
+      "surfaceWord": "否则",
+      "canonical": "ELSE",
+      "languageCode": "zh",
+      "languageName": "Chinese (Simplified)"
+    },
+    {
+      "surfaceWord": "当",
+      "canonical": "WHILE",
+      "languageCode": "zh",
+      "languageName": "Chinese (Simplified)"
+    },
+    {
+      "surfaceWord": "对于",
+      "canonical": "FOR",
+      "languageCode": "zh",
+      "languageName": "Chinese (Simplified)"
+    },
+    {
+      "surfaceWord": "中断",
+      "canonical": "BREAK",
+      "languageCode": "zh",
+      "languageName": "Chinese (Simplified)"
+    },
+    {
+      "surfaceWord": "继续",
+      "canonical": "CONTINUE",
+      "languageCode": "zh",
+      "languageName": "Chinese (Simplified)"
+    },
+    {
+      "surfaceWord": "真",
+      "canonical": "TRUE",
+      "languageCode": "zh",
+      "languageName": "Chinese (Simplified)"
+    },
+    {
+      "surfaceWord": "假",
+      "canonical": "FALSE",
+      "languageCode": "zh",
+      "languageName": "Chinese (Simplified)"
+    },
+    {
+      "surfaceWord": "空",
+      "canonical": "NULL",
+      "languageCode": "zh",
+      "languageName": "Chinese (Simplified)"
+    },
+    {
+      "surfaceWord": "在",
+      "canonical": "IN",
+      "languageCode": "zh",
+      "languageName": "Chinese (Simplified)"
+    },
+    {
+      "surfaceWord": "funcao",
+      "canonical": "FUNCTION",
+      "languageCode": "pt",
+      "languageName": "Portuguese"
+    },
+    {
+      "surfaceWord": "seja",
+      "canonical": "LET",
+      "languageCode": "pt",
+      "languageName": "Portuguese"
+    },
+    {
+      "surfaceWord": "tipo",
+      "canonical": "TYPE",
+      "languageCode": "pt",
+      "languageName": "Portuguese"
+    },
+    {
+      "surfaceWord": "estrutura",
+      "canonical": "STRUCT",
+      "languageCode": "pt",
+      "languageName": "Portuguese"
+    },
+    {
+      "surfaceWord": "importar",
+      "canonical": "IMPORT",
+      "languageCode": "pt",
+      "languageName": "Portuguese"
+    },
+    {
+      "surfaceWord": "retornar",
+      "canonical": "RETURN",
+      "languageCode": "pt",
+      "languageName": "Portuguese"
+    },
+    {
+      "surfaceWord": "fim",
+      "canonical": "END",
+      "languageCode": "pt",
+      "languageName": "Portuguese"
+    },
+    {
+      "surfaceWord": "se",
+      "canonical": "IF",
+      "languageCode": "pt",
+      "languageName": "Portuguese"
+    },
+    {
+      "surfaceWord": "senao",
+      "canonical": "ELSE",
+      "languageCode": "pt",
+      "languageName": "Portuguese"
+    },
+    {
+      "surfaceWord": "enquanto",
+      "canonical": "WHILE",
+      "languageCode": "pt",
+      "languageName": "Portuguese"
+    },
+    {
+      "surfaceWord": "para",
+      "canonical": "FOR",
+      "languageCode": "pt",
+      "languageName": "Portuguese"
+    },
+    {
+      "surfaceWord": "pare",
+      "canonical": "BREAK",
+      "languageCode": "pt",
+      "languageName": "Portuguese"
+    },
+    {
+      "surfaceWord": "continue",
+      "canonical": "CONTINUE",
+      "languageCode": "pt",
+      "languageName": "Portuguese"
+    },
+    {
+      "surfaceWord": "verdadeiro",
+      "canonical": "TRUE",
+      "languageCode": "pt",
+      "languageName": "Portuguese"
+    },
+    {
+      "surfaceWord": "falso",
+      "canonical": "FALSE",
+      "languageCode": "pt",
+      "languageName": "Portuguese"
+    },
+    {
+      "surfaceWord": "nulo",
+      "canonical": "NULL",
+      "languageCode": "pt",
+      "languageName": "Portuguese"
+    },
+    {
+      "surfaceWord": "em",
+      "canonical": "IN",
+      "languageCode": "pt",
+      "languageName": "Portuguese"
+    },
+    {
+      "surfaceWord": "कार्य",
+      "canonical": "FUNCTION",
+      "languageCode": "hi",
+      "languageName": "Hindi"
+    },
+    {
+      "surfaceWord": "मान",
+      "canonical": "LET",
+      "languageCode": "hi",
+      "languageName": "Hindi"
+    },
+    {
+      "surfaceWord": "प्रकार",
+      "canonical": "TYPE",
+      "languageCode": "hi",
+      "languageName": "Hindi"
+    },
+    {
+      "surfaceWord": "संरचना",
+      "canonical": "STRUCT",
+      "languageCode": "hi",
+      "languageName": "Hindi"
+    },
+    {
+      "surfaceWord": "आयात",
+      "canonical": "IMPORT",
+      "languageCode": "hi",
+      "languageName": "Hindi"
+    },
+    {
+      "surfaceWord": "वापस",
+      "canonical": "RETURN",
+      "languageCode": "hi",
+      "languageName": "Hindi"
+    },
+    {
+      "surfaceWord": "समाप्त",
+      "canonical": "END",
+      "languageCode": "hi",
+      "languageName": "Hindi"
+    },
+    {
+      "surfaceWord": "अगर",
+      "canonical": "IF",
+      "languageCode": "hi",
+      "languageName": "Hindi"
+    },
+    {
+      "surfaceWord": "अन्यथा",
+      "canonical": "ELSE",
+      "languageCode": "hi",
+      "languageName": "Hindi"
+    },
+    {
+      "surfaceWord": "जबतक",
+      "canonical": "WHILE",
+      "languageCode": "hi",
+      "languageName": "Hindi"
+    },
+    {
+      "surfaceWord": "प्रत्येक",
+      "canonical": "FOR",
+      "languageCode": "hi",
+      "languageName": "Hindi"
+    },
+    {
+      "surfaceWord": "रोक",
+      "canonical": "BREAK",
+      "languageCode": "hi",
+      "languageName": "Hindi"
+    },
+    {
+      "surfaceWord": "जारी",
+      "canonical": "CONTINUE",
+      "languageCode": "hi",
+      "languageName": "Hindi"
+    },
+    {
+      "surfaceWord": "सत्य",
+      "canonical": "TRUE",
+      "languageCode": "hi",
+      "languageName": "Hindi"
+    },
+    {
+      "surfaceWord": "असत्य",
+      "canonical": "FALSE",
+      "languageCode": "hi",
+      "languageName": "Hindi"
+    },
+    {
+      "surfaceWord": "शून्य",
+      "canonical": "NULL",
+      "languageCode": "hi",
+      "languageName": "Hindi"
+    },
+    {
+      "surfaceWord": "में",
+      "canonical": "IN",
+      "languageCode": "hi",
+      "languageName": "Hindi"
+    }
+  ],
+  "crossLanguageCollisions": [],
+  "lexicalRules": {
+    "identifierStart": "isIdentStart (lexer.ts ~L156-158): a Unicode letter (per isUnicodeLetter, ~L120-153: ASCII, Arabic U+0621-063A/U+0641-064A/U+066E-06FF/U+0750-077F/U+FB50-FDFF/U+FE70-FEFF, Latin Extended U+00C0-024F, Greek U+0370-03FF, Cyrillic U+0400-04FF, CJK U+4E00-9FFF, Devanagari U+0900-0961/U+0971-097F, Hiragana/Katakana U+3040-30FF) or underscore (0x5F)",
+    "identifierContinue": "isIdentContinue (lexer.ts ~L160-172): identifierStart, OR ASCII digit 0-9, OR Arabic tashkeel diacritics U+064B-065F/U+0670, OR Devanagari combining marks U+0900-0903/U+093A-094F/U+0955-0963/U+0966-096F (Devanagari digits)",
+    "lineComment": "// (lexer.ts ~L256, verified present)",
+    "blockComment": "/* ... */ (lexer.ts ~L262, verified present)",
+    "stringLiteral": "quoted text; both \" and ' delimiters, both with escape handling confirmed (lexer.ts ~L287, ~L332)",
+    "numberLiteral": "INT_LIT / FLOAT_LIT (lexer.ts ~L47-48, ~L397) - distinguished by presence of a decimal point",
+    "operators": [
+      "+ (PLUS)",
+      "- (MINUS)",
+      "* (STAR)",
+      "/ (SLASH)",
+      "% (PERCENT)",
+      "= (EQ)",
+      "== (EQ_EQ)",
+      "!= (BANG_EQ)",
+      "< (LT)",
+      "<= (LT_EQ)",
+      "> (GT)",
+      ">= (GT_EQ)",
+      "&& (AND)",
+      "|| (OR)",
+      "! (BANG)"
+    ],
+    "punctuationNotes": [
+      ". (DOT)",
+      ", or ، — Arabic comma U+060C also produces COMMA (lexer.ts ~L431, verified present) - a genuinely multilingual punctuation detail, not assumed",
+      ": (COLON)",
+      "( ) (LPAREN/RPAREN)",
+      "[ ] (LBRACKET/RBRACKET)",
+      "IN is CONTEXTUAL, not a globally-reserved keyword (canonical.ts: CANONICAL_TO_TOKEN.IN = \"IDENTIFIER\") - only meaningful inside a for...in construct; a grammar may choose to highlight it unconditionally as a simplification, or only in that context - not decided by this contract"
+    ]
+  }
+}

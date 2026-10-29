@@ -1,0 +1,102 @@
+[
+  {
+    "recordedAt": "2026-07-09T10:49:00.498Z",
+    "versionTag": "v27-level2-9-optimizer",
+    "results": {
+      "tiny (arithmetic only)": {
+        "lexParseMs": 1.5329850000000533,
+        "semanticTypeMs": 1.318427999999983,
+        "loweringMs": 1.1308839999999805,
+        "constantFoldingMs": 0.18328299999996034,
+        "dceMs": 0.3829860000000167,
+        "backendMs": 0.49812800000000834,
+        "totalMs": 5.190261000000021,
+        "instructionsBefore": 3,
+        "instructionsAfter": 1
+      },
+      "small (while loop, 1 function)": {
+        "lexParseMs": 0.716212999999982,
+        "semanticTypeMs": 0.4043890000000374,
+        "loweringMs": 0.3519979999999805,
+        "constantFoldingMs": 0.08300300000001926,
+        "dceMs": 0.22314199999999573,
+        "backendMs": 0.19272100000000592,
+        "totalMs": 1.9847570000000019,
+        "instructionsBefore": 16,
+        "instructionsAfter": 16
+      },
+      "medium (struct + array + nested loops)": {
+        "lexParseMs": 0.692592999999988,
+        "semanticTypeMs": 0.7644220000000246,
+        "loweringMs": 0.5973129999999855,
+        "constantFoldingMs": 0.036585999999999785,
+        "dceMs": 0.3162770000000137,
+        "backendMs": 0.3834590000000162,
+        "totalMs": 2.8080620000000067,
+        "instructionsBefore": 45,
+        "instructionsAfter": 45
+      },
+      "large (20 functions, call chain + dead code)": {
+        "lexParseMs": 1.3181380000000331,
+        "semanticTypeMs": 0.8015649999999823,
+        "loweringMs": 1.9752010000000269,
+        "constantFoldingMs": 0.20036100000010038,
+        "dceMs": 0.31010899999995445,
+        "backendMs": 0.35805399999998144,
+        "totalMs": 5.122965000000022,
+        "instructionsBefore": 141,
+        "instructionsAfter": 81
+      }
+    }
+  },
+  {
+    "recordedAt": "2026-07-11T15:43:21.147Z",
+    "versionTag": "--help",
+    "results": {
+      "tiny (arithmetic only)": {
+        "lexParseMs": 1.7603899999999726,
+        "semanticTypeMs": 1.631934000000001,
+        "loweringMs": 1.5159100000000194,
+        "constantFoldingMs": 0.2335230000000479,
+        "dceMs": 0.5405120000000352,
+        "backendMs": 0.6773579999999697,
+        "totalMs": 6.4214640000000145,
+        "instructionsBefore": 3,
+        "instructionsAfter": 1
+      },
+      "small (while loop, 1 function)": {
+        "lexParseMs": 0.5192340000000399,
+        "semanticTypeMs": 0.42123199999997496,
+        "loweringMs": 0.5796950000000152,
+        "constantFoldingMs": 0.16948600000000624,
+        "dceMs": 0.22284799999999905,
+        "backendMs": 0.27518200000002935,
+        "totalMs": 2.2033720000000017,
+        "instructionsBefore": 16,
+        "instructionsAfter": 16
+      },
+      "medium (struct + array + nested loops)": {
+        "lexParseMs": 0.5469049999999811,
+        "semanticTypeMs": 0.8170520000000465,
+        "loweringMs": 0.7212940000000003,
+        "constantFoldingMs": 0.05015899999995099,
+        "dceMs": 0.3136559999999804,
+        "backendMs": 0.4862719999999854,
+        "totalMs": 2.956780999999978,
+        "instructionsBefore": 45,
+        "instructionsAfter": 45
+      },
+      "large (20 functions, call chain + dead code)": {
+        "lexParseMs": 1.6028349999999705,
+        "semanticTypeMs": 1.4072630000000004,
+        "loweringMs": 1.8863390000000209,
+        "constantFoldingMs": 0.27701800000005505,
+        "dceMs": 0.46487499999983584,
+        "backendMs": 0.3649239999999736,
+        "totalMs": 6.162754000000007,
+        "instructionsBefore": 141,
+        "instructionsAfter": 81
+      }
+    }
+  }
+]

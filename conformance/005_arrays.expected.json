@@ -1,0 +1,19 @@
+{
+  "name": "005_arrays",
+  "parseDiagnostics": [],
+  "typecheckDiagnostics": [],
+  "lowerOk": true,
+  "lowerDiagnostics": [],
+  "irSummary": {
+    "functionCount": 1,
+    "instructionKindCounts": {
+      "const": 7,
+      "array_store": 3,
+      "array_load": 1
+    }
+  },
+  "cCompiles": true,
+  "cRuntimeExitCode": 20,
+  "wasmAccepted": true,
+  "wasmRuntimeResult": "20"
+}

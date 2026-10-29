@@ -1,0 +1,45 @@
+{
+  "name": "ur-language",
+  "displayName": "UR Language",
+  "description": "Language support for UR (diagnostics, completion, hover, navigation) via the UR Language Server.",
+  "version": "0.1.0",
+  "publisher": "ur-lang",
+  "private": true,
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Programming Languages"],
+  "activationEvents": [
+    "onLanguage:ur"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "ur",
+        "aliases": ["UR", "ur"],
+        "extensions": [".ur"]
+      }
+    ],
+    "grammars": [
+      {
+        "language": "ur",
+        "scopeName": "source.ur",
+        "path": "./syntaxes/ur.tmLanguage.json"
+      }
+    ]
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1",
+    "tsx": "^4.7.0"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.4.0"
+  }
+}

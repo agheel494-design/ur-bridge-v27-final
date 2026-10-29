@@ -1,0 +1,17 @@
+{
+  "name": "007_byte",
+  "parseDiagnostics": [],
+  "typecheckDiagnostics": [],
+  "lowerOk": true,
+  "lowerDiagnostics": [],
+  "irSummary": {
+    "functionCount": 1,
+    "instructionKindCounts": {
+      "const": 1
+    }
+  },
+  "cCompiles": true,
+  "cRuntimeExitCode": 200,
+  "wasmAccepted": true,
+  "wasmRuntimeResult": "200"
+}

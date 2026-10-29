@@ -1,0 +1,7 @@
+{
+  "name": "cppmath",
+  "version": "0.1.0",
+  "runtime": "cpp",
+  "module": "mathlib",
+  "exports": { "tripleFn": "triple" }
+}

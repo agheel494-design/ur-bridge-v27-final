@@ -1,0 +1,52 @@
+
+  Localization — language registry
+    ✓ exactly 10 languages are registered
+    ✓ all 10 mandated language codes are present
+    ✓ zero cross-language keyword collisions
+    ✓ every language declares all 16 canonical keywords
+
+  Localization — full pipeline (Source→Lexer→Parser→AST→Semantic→TypeChecker) per language
+    ✓ ar (Arabic): zero errors at every stage
+    ✓ en (English): zero errors at every stage
+    ✓ fr (French): zero errors at every stage
+    ✓ es (Spanish): zero errors at every stage
+    ✓ de (German): zero errors at every stage
+    ✓ ja (Japanese): zero errors at every stage
+    ✓ ru (Russian): zero errors at every stage
+    ✓ zh (Chinese (Simplified)): zero errors at every stage
+    ✓ pt (Portuguese): zero errors at every stage
+    ✓ hi (Hindi): zero errors at every stage
+
+  Localization — all 10 languages produce IDENTICAL AST structure
+    ✓ ar: AST structure matches the English baseline exactly
+    ✓ en: AST structure matches the English baseline exactly
+    ✓ fr: AST structure matches the English baseline exactly
+    ✓ es: AST structure matches the English baseline exactly
+    ✓ de: AST structure matches the English baseline exactly
+    ✓ ja: AST structure matches the English baseline exactly
+    ✓ ru: AST structure matches the English baseline exactly
+    ✓ zh: AST structure matches the English baseline exactly
+    ✓ pt: AST structure matches the English baseline exactly
+    ✓ hi: AST structure matches the English baseline exactly
+    ✓ sanity: the English fingerprint is non-trivial (not an empty/degenerate program)
+
+  Localization — isCanonicalIn (Parser's contextual 'for x in y' check)
+    ✓ recognizes every language's word for IN
+    ✓ 'for x in y' parses correctly in every language using ITS OWN word for 'in'
+    ✓ the Parser contains no hardcoded language-specific 'in' word (regression)
+
+  Localization — mixed-language programs (any combination)
+    ✓ a program mixing Arabic, English, and French keywords parses with zero errors
+    ✓ mixing German and Chinese in the same function
+
+  Localization — Hindi (Devanagari) identifiers and keywords
+    ✓ Hindi keywords tokenize to the correct canonical TokenKind
+    ✓ Devanagari-script identifiers (not just keywords) lex correctly
+    ✓ Hindi combining marks (matras) do not break identifier tokenization
+
+────────────────────────────────────────
+Tests:  33 total
+Passed: 33
+Failed: 0
+
+✅ All 33 tests passed

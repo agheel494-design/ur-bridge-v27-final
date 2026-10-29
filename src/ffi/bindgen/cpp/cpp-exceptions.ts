@@ -1,0 +1,229 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// UR-Bridge — Binding Generator: C++ Exception Mapping & Trampoline Emitter
+// Phase 7 — Native Ecosystem Hardening — Exception Mapping
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// No C++ exception may ever cross the FFI boundary — doing so is undefined
+// behavior the instant it reaches non-C++ (or even C++ compiled with
+// incompatible unwind tables) calling code. This module generates
+// `extern "C"` trampoline wrappers that catch the standard exception
+// hierarchy AT the boundary and convert it into a UR-style status code +
+// message, never letting an exception propagate past the wrapper.
+//
+// Scope (per ROADMAP_LOCK.md "Phase 7 — Exception Mapping"): the standard
+// hierarchy rooted at std::exception, specifically std::logic_error,
+// std::invalid_argument, std::out_of_range, and std::runtime_error.
+// User-defined exception types are NOT auto-detected (the bindgen has no
+// way to discover application-specific hierarchies from a header alone);
+// they fall through to the generic `std::exception` handler if they
+// derive from it, or otherwise are documented as an unsupported case (see
+// CPP_EXCEPTION_MAPPING.md).
+//
+// Catch-clause ORDER is load-bearing for correctness: C++ tries catch
+// clauses in textual order and stops at the first type match, unlike
+// overload resolution which picks the *best* match — so the most-derived
+// types (invalid_argument, out_of_range) MUST be caught before their base
+// (logic_error), which must be caught before the root (exception).
+// Getting this wrong doesn't fail to compile; it silently misclassifies
+// every derived exception as its base, which is exactly the kind of bug
+// this module exists to prevent.
+//
+// A trailing `catch (...)` is ALWAYS emitted after the std::exception
+// clause: C++ permits throwing values that don't derive from
+// std::exception at all (`throw 42;`, `throw std::string(...)`, a custom
+// type with no relation to the standard hierarchy). `catch
+// (const std::exception&)` does NOT catch these — only `catch (...)`
+// does, and since it gives no access to `.what()` (the thrown value's
+// type isn't known to be anything in particular), the message is a fixed
+// diagnostic string rather than anything extracted from the exception.
+// Without this clause, such a throw would escape the `extern "C"`
+// trampoline entirely and call std::terminate — the exact FFI-boundary
+// leak this whole module exists to prevent.
+// ─────────────────────────────────────────────────────────────────────────────
+
+import type { CppType } from "./itanium-mangle.js";
+import type { BoundClass, BoundMethod, BoundFunction } from "./cpp-converter.js";
+
+export type UrErrorCode =
+  | "UR_OK"
+  | "UR_INVALID_ARGUMENT"
+  | "UR_OUT_OF_RANGE"
+  | "UR_LOGIC_ERROR"
+  | "UR_RUNTIME_ERROR"
+  | "UR_UNKNOWN_EXCEPTION"
+  | "UR_UNKNOWN_THROWN_VALUE";
+
+export type CppExceptionMapping = { cppType: string; urErrorCode: UrErrorCode };
+
+/**
+ * Ordered MOST-DERIVED FIRST. This order is emitted verbatim as the
+ * sequence of `catch` clauses — do not reorder without re-verifying catch
+ * semantics (see module header comment).
+ */
+export const STANDARD_EXCEPTION_MAPPINGS: readonly CppExceptionMapping[] = [
+  { cppType: "std::invalid_argument", urErrorCode: "UR_INVALID_ARGUMENT" },
+  { cppType: "std::out_of_range", urErrorCode: "UR_OUT_OF_RANGE" },
+  { cppType: "std::logic_error", urErrorCode: "UR_LOGIC_ERROR" },
+  { cppType: "std::runtime_error", urErrorCode: "UR_RUNTIME_ERROR" },
+  { cppType: "std::exception", urErrorCode: "UR_UNKNOWN_EXCEPTION" },
+];
+
+// ── C++ source-syntax rendering (distinct from Itanium mangling) ──────────────
+
+export function renderCppType(t: CppType): string {
+  switch (t.kind) {
+    case "builtin": return t.name;
+    case "named": return t.path.join("::");
+    case "template-instance": return `${t.path.join("::")}<${t.args.map(renderCppType).join(", ")}>`;
+    case "pointer": return `${renderCppType(t.pointee)}*`;
+    case "reference": return `${renderCppType(t.pointee)}&`;
+    case "const": return `const ${renderCppType(t.inner)}`;
+  }
+}
+
+function qualifiedSourceName(namespace: string[], className: string, templateArgs?: CppType[]): string {
+  const cls = templateArgs ? `${className}<${templateArgs.map(renderCppType).join(", ")}>` : className;
+  return [...namespace, cls].join("::");
+}
+
+// ── Trampoline emission ────────────────────────────────────────────────────
+
+export type EmittedTrampoline = {
+  /** Flat, C-ABI-safe extern "C" symbol name, e.g. "Widget_resize". Always unique within a binding plan. */
+  trampolineName: string;
+  /** Real mangled symbol of the underlying C++ method/function it calls. */
+  targetMangledName: string;
+  source: string; // the extern "C" function definition
+};
+
+const RUNTIME_PRELUDE = `// Auto-generated by UR-Bridge bindgen (cpp-exceptions.ts) — do not edit.
+#include <stdexcept>
+#include <exception>
+#include <new>
+#include <cstring>
+
+extern "C" {
+typedef enum {
+  UR_OK = 0,
+  UR_INVALID_ARGUMENT = 1,
+  UR_OUT_OF_RANGE = 2,
+  UR_LOGIC_ERROR = 3,
+  UR_RUNTIME_ERROR = 4,
+  UR_UNKNOWN_EXCEPTION = 5,
+  UR_UNKNOWN_THROWN_VALUE = 6,
+} UrErrorCode;
+}
+
+static void ur_copy_err(char* buf, int bufLen, const char* msg) {
+  if (bufLen <= 0) return;
+  std::strncpy(buf, msg, static_cast<size_t>(bufLen) - 1);
+  buf[bufLen - 1] = '\\0';
+}
+`;
+
+function catchCascade(bodyOnError: (code: UrErrorCode) => string): string {
+  const typedCatches = STANDARD_EXCEPTION_MAPPINGS
+    .map(({ cppType, urErrorCode }) =>
+      `  } catch (const ${cppType}& e) {\n    ur_copy_err(errBuf, errBufLen, e.what());\n    ${bodyOnError(urErrorCode)}\n`)
+    .join("");
+  // Final safety net: catches literally anything, including values that
+  // don't derive from std::exception at all. No `.what()` is available
+  // here, so the message is a fixed diagnostic string.
+  const catchAll =
+    `  } catch (...) {\n    ur_copy_err(errBuf, errBufLen, "unknown non-standard value thrown across FFI boundary");\n    ${bodyOnError("UR_UNKNOWN_THROWN_VALUE")}\n`;
+  return typedCatches + catchAll;
+}
+
+function dedupeNames(rawNames: string[]): string[] {
+  const seen = new Map<string, number>();
+  return rawNames.map((n) => {
+    const count = seen.get(n) ?? 0;
+    seen.set(n, count + 1);
+    return count === 0 ? n : `${n}_${count}`;
+  });
+}
+
+function emitMethodTrampoline(cls: BoundClass, m: BoundMethod, trampolineName: string): EmittedTrampoline {
+  const qname = qualifiedSourceName(cls.namespace, cls.className, cls.templateArgs);
+  const params = m.params.map((p, i) => `${renderCppType(p.type)} a${i}`).join(", ");
+  const argList = m.params.map((_, i) => `a${i}`).join(", ");
+  const selfParam = m.kind === "static-method" ? "" : (m.isConst ? "const void* self" : "void* self");
+  const allParams = [selfParam, params].filter(Boolean).join(", ");
+  const selfCast = m.isConst ? `static_cast<const ${qname}*>(self)` : `static_cast<${qname}*>(self)`;
+
+  let body: string;
+  if (m.kind === "ctor") {
+    body = `new(self) ${qname}(${argList});`;
+  } else if (m.kind === "dtor") {
+    // Destructors are implicitly noexcept; if a user-defined dtor throws,
+    // the program terminates per the C++ standard regardless of any
+    // try/catch here, so we intentionally don't wrap it.
+    return {
+      trampolineName,
+      targetMangledName: m.mangledName,
+      source: `extern "C" void ${trampolineName}(void* self) {\n  static_cast<${qname}*>(self)->~${cls.className}();\n}\n`,
+    };
+  } else if (m.kind === "static-method") {
+    body = `${qname}::${m.name}(${argList});`;
+  } else {
+    body = `${selfCast}->${m.name}(${argList});`;
+  }
+
+  const isVoidReturn = m.kind === "ctor" || (m.returnType.kind === "builtin" && m.returnType.name === "void");
+  const outParam = isVoidReturn ? "" : `, ${renderCppType(m.returnType)}* outResult`;
+  const sig = `extern "C" int ${trampolineName}(${allParams}${outParam}, char* errBuf, int errBufLen)`;
+  const call = isVoidReturn ? `${body}\n    return UR_OK;` : `*outResult = ${body.replace(/;$/, "")};\n    return UR_OK;`;
+
+  const source = `${sig} {\n  try {\n    ${call}\n${catchCascade((code) => `return ${code};`)}  }\n}\n`;
+  return { trampolineName, targetMangledName: m.mangledName, source };
+}
+
+function emitFunctionTrampoline(f: BoundFunction, trampolineName: string): EmittedTrampoline {
+  const params = f.params.map((p, i) => `${renderCppType(p.type)} a${i}`).join(", ");
+  const argList = f.params.map((_, i) => `a${i}`).join(", ");
+  const isVoidReturn = f.returnType.kind === "builtin" && f.returnType.name === "void";
+  const outParam = isVoidReturn ? "" : `${params ? ", " : ""}${renderCppType(f.returnType)}* outResult`;
+  const qname = [...f.namespace, f.name].join("::");
+  const call = isVoidReturn ? `${qname}(${argList});\n    return UR_OK;` : `*outResult = ${qname}(${argList});\n    return UR_OK;`;
+  const sig = `extern "C" int ${trampolineName}(${params}${outParam}, char* errBuf, int errBufLen)`;
+  const source = `${sig} {\n  try {\n    ${call}\n${catchCascade((code) => `return ${code};`)}  }\n}\n`;
+  return { trampolineName, targetMangledName: f.mangledName, source };
+}
+
+export type EmittedTrampolineFile = {
+  trampolines: EmittedTrampoline[];
+  /** Full, ready-to-compile-with-the-real-header .cpp source. */
+  source: string;
+};
+
+/**
+ * Emits exception-safe `extern "C"` trampolines for every class method and
+ * free function in `plan`. Each trampoline name is guaranteed unique
+ * within the file (overloads get a numeric suffix). The caller is
+ * responsible for prepending an `#include` of the real header(s) the
+ * binding plan was parsed from — this emitter only knows about types, not
+ * file paths.
+ */
+export function emitExceptionSafeTrampolines(
+  plan: { classes: BoundClass[]; functions: BoundFunction[] },
+  headerIncludes: string[] = [],
+): EmittedTrampolineFile {
+  const trampolines: EmittedTrampoline[] = [];
+
+  for (const cls of plan.classes) {
+    const rawNames = cls.methods.map((m) => {
+      if (m.kind === "ctor") return `${cls.bindingName}_ctor`;
+      if (m.kind === "dtor") return `${cls.bindingName}_dtor`;
+      return `${cls.bindingName}_${m.name}`;
+    });
+    const names = dedupeNames(rawNames);
+    cls.methods.forEach((m, i) => trampolines.push(emitMethodTrampoline(cls, m, names[i]!)));
+  }
+
+  const fnNames = dedupeNames(plan.functions.map((f) => [...f.namespace, f.name].join("_")));
+  plan.functions.forEach((f, i) => trampolines.push(emitFunctionTrampoline(f, fnNames[i]!)));
+
+  const includesSrc = headerIncludes.map((h) => `#include "${h}"`).join("\n");
+  const source = [RUNTIME_PRELUDE, includesSrc, "", ...trampolines.map((t) => t.source)].join("\n");
+  return { trampolines, source };
+}

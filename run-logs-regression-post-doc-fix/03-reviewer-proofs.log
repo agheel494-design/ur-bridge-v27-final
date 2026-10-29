@@ -1,0 +1,20 @@
+
+  Reviewer-requested Proof 1: complete Japanese program, all 17 keywords, real usage
+    ✓ Japanese program: zero Lexer errors, zero Parser errors
+    ✓ English equivalent: zero Lexer errors, zero Parser errors (baseline)
+    ✓ Japanese and English produce STRUCTURALLY IDENTICAL ASTs (identifier text stripped, everything else compared)
+    ✓ real, explicit usage confirmation: FOR uses IN, both real Japanese words, and the loop is genuinely a ForStatement node in the AST
+
+  Reviewer-requested Proof 2: STRUCT genuinely USED, not merely declared
+    ✓ Japanese STRUCT (kouzoutai) used as a real function parameter type, with real field access in the function body
+
+  Reviewer-requested Proofs 3-4: Italian completely removed from the system
+    ✓ 'it' is not present anywhere in the language registry
+    ✓ real, former Italian keywords ('funzione', 'sia', 'ritorna', 'fine') are no longer recognized as keywords - a program using them fails to parse
+
+────────────────────────────────────────
+Tests:  7 total
+Passed: 7
+Failed: 0
+
+✅ All 7 tests passed

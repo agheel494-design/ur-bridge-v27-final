@@ -1,0 +1,1064 @@
+﻿**********************
+Windows PowerShell transcript start
+Start time: 20261024223124
+Username: عقيل\عقيل
+RunAs User: عقيل\عقيل
+Configuration Name: 
+Machine: عقيل (Microsoft Windows NT 10.0.19045.0)
+Host Application: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe
+Process ID: 12412
+PSVersion: 5.1.19041.7802
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.19041.7802
+BuildVersion: 10.0.19041.7802
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+
+=== 1. C RUNTIME: ALLOCATION AND LENGTH ===
+
+
+Path       : D:\ur-bridge-v27-final\runtime\ur_runtime.c
+LineNumber : 342
+Line       : // ur_gc_alloc_array(), BEFORE the new object is allocated — the same
+
+Path       : D:\ur-bridge-v27-final\runtime\ur_runtime.c
+LineNumber : 415
+Line       : int64_t* ur_gc_alloc_array(int64_t length, UrGcElementKind element_kind) {
+
+Path       : D:\ur-bridge-v27-final\runtime\ur_runtime.c
+LineNumber : 450
+Line       : int64_t ur_array_length(int64_t *ref) {
+
+Path       : D:\ur-bridge-v27-final\runtime\ur_runtime.c
+LineNumber : 538
+Line       :     // ur_gc_alloc_array() call since Gate A9.1) — not the old,
+
+Path       : D:\ur-bridge-v27-final\runtime\ur_runtime.h
+LineNumber : 169
+Line       : // The unified header EVERY array allocated through ur_gc_alloc_array()
+
+Path       : D:\ur-bridge-v27-final\runtime\ur_runtime.h
+LineNumber : 198
+Line       : int64_t* ur_gc_alloc_array(int64_t length, UrGcElementKind element_kind);
+
+Path       : D:\ur-bridge-v27-final\runtime\ur_runtime.h
+LineNumber : 202
+Line       :  * ur_gc_alloc_array(), read directly from its own header. This is the
+
+Path       : D:\ur-bridge-v27-final\runtime\ur_runtime.h
+LineNumber : 211
+Line       : int64_t ur_array_length(int64_t* ref);
+
+Path       : D:\ur-bridge-v27-final\runtime\ur_runtime.h
+LineNumber : 219
+Line       : //      INSIDE ur_gc_alloc_array() itself.
+
+Path       : D:\ur-bridge-v27-final\runtime\ur_runtime.h
+LineNumber : 220
+Line       : //   2. Inside ur_gc_alloc_array(), the trigger check (and any
+
+Path       : D:\ur-bridge-v27-final\runtime\ur_runtime.h
+LineNumber : 310
+Line       : // ur_gc_alloc_array() call or a copy of an already-valid root —
+
+Path       : D:\ur-bridge-v27-final\src\backend\c\emit-c.ts
+LineNumber : 204
+Line       :           // the new, unified ur_array_length() — replacing the direct
+
+Path       : D:\ur-bridge-v27-final\src\backend\c\emit-c.ts
+LineNumber : 206
+Line       :           // described, now that ur_gc_alloc_array() gives every array
+
+Path       : D:\ur-bridge-v27-final\src\backend\c\emit-c.ts
+LineNumber : 209
+Line       :             ? `ur_array_length(${slotName})`
+
+Path       : D:\ur-bridge-v27-final\src\backend\c\emit-c.ts
+LineNumber : 337
+Line       :       const length = (inst.baseRef || slot?.isArrayResult) ?
+             `ur_array_length(${base})` : (slot?.runtimeLengthCName ?? slot?.length ?? 0);
+
+Path       : D:\ur-bridge-v27-final\src\backend\c\emit-c.ts
+LineNumber : 361
+Line       :       const length = (inst.baseRef || slot?.isArrayResult) ?
+             `ur_array_length(${base})` : (slot?.runtimeLengthCName ?? slot?.length ?? 0);
+
+Path       : D:\ur-bridge-v27-final\src\backend\c\emit-c.ts
+LineNumber : 763
+Line       :     // ur_gc_alloc_array() contract (Gate A9.1's own runtime foundation)
+
+Path       : D:\ur-bridge-v27-final\src\backend\c\emit-c.ts
+LineNumber : 791
+Line       :         // header, read uniformly via ur_array_length() everywhere
+
+Path       : D:\ur-bridge-v27-final\src\backend\c\emit-c.ts
+LineNumber : 793
+Line       :         `  ${cType(slot.type)}* ${cSlotName(slot.name)} =
+             (${cType(slot.type)}*)ur_gc_alloc_array(${slot.length ?? 1},
+             ${elementKindFor(slot)});`
+
+Path       : D:\ur-bridge-v27-final\src\backend\c\emit-c.ts
+LineNumber : 803
+Line       :     // unified path, by ur_gc_alloc_array()'s own header/sweep-list
+
+Path       : D:\ur-bridge-v27-final\src\backend\c\emit-c.ts
+LineNumber : 883
+Line       :     // migration routes every owning array through ur_gc_alloc_array(),
+
+Path       : D:\ur-bridge-v27-final\tests\codegen\golden\16-array-literal-read\expected.c
+LineNumber : 14
+Line       :   int64_t* slot_arr = (int64_t*)ur_gc_alloc_array(3, UR_GC_ELEMENT_SCALAR);
+
+Path       : D:\ur-bridge-v27-final\tests\codegen\golden\17-array-write\expected.c
+LineNumber : 14
+Line       :   int64_t* slot_arr = (int64_t*)ur_gc_alloc_array(3, UR_GC_ELEMENT_SCALAR);
+
+Path       : D:\ur-bridge-v27-final\tests\codegen\golden\18-array-while\expected.c
+LineNumber : 14
+Line       :   int64_t* slot_arr = (int64_t*)ur_gc_alloc_array(5, UR_GC_ELEMENT_SCALAR);
+
+Path       : D:\ur-bridge-v27-final\tests\codegen\golden\19-array-if\expected.c
+LineNumber : 14
+Line       :   int64_t* slot_arr = (int64_t*)ur_gc_alloc_array(3, UR_GC_ELEMENT_SCALAR);
+
+
+
+
+=== 2. WASM ARRAY LOCAL INITIALIZATION ===
+
+
+IgnoreCase : True
+LineNumber : 37
+Line       : import { encodeArrayElementLoad, encodeArrayElementStore,
+             encodeArrayRefElementLoad, encodeArrayRefElementStore, encodeArrayAllocation,
+             encodeArrayHeaderStore, encodeArrayLengthLoad, encodeMemorySection,
+             encodeGlobalSection, encodeBoundsCheck } from "./array-memory.js";
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 309
+Line       : function encodeReturnBlockBody(block: IRBasicBlock, fn: IRFunction,
+             functionIndexByName: ReadonlyMap<string, number>, localIndexBySlotId:
+             ReadonlyMap<number, number> = new Map(), arrayBaseLocalIndexBySlotId:
+             ReadonlyMap<number, number> = new Map(), bumpGlobalIndex = 0,
+             structBaseLocalIndexBySlotId: ReadonlyMap<number, number> = new Map()): Uint8Array
+             {
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 316
+Line       :       encodeStatements(block, branchInstructionsById, functionIndexByName, fn,
+             localIndexBySlotId, arrayBaseLocalIndexBySlotId, bumpGlobalIndex, undefined,
+             structBaseLocalIndexBySlotId),
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 317
+Line       :       encodeReturnBlockBody(targetBlock, fn, functionIndexByName,
+             localIndexBySlotId, arrayBaseLocalIndexBySlotId, bumpGlobalIndex,
+             structBaseLocalIndexBySlotId),
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 326
+Line       :       encodeStatements(block, conditionInstructionsById, functionIndexByName, fn,
+             localIndexBySlotId, arrayBaseLocalIndexBySlotId, bumpGlobalIndex, undefined,
+             structBaseLocalIndexBySlotId),
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 327
+Line       :       encodeExpr(terminator.condition.id, conditionInstructionsById,
+             functionIndexByName, fn, localIndexBySlotId, arrayBaseLocalIndexBySlotId,
+             structBaseLocalIndexBySlotId),
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 329
+Line       :       encodeReturnBlockBody(thenBlock, fn, functionIndexByName,
+             localIndexBySlotId, arrayBaseLocalIndexBySlotId, bumpGlobalIndex,
+             structBaseLocalIndexBySlotId),
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 331
+Line       :       encodeReturnBlockBody(elseBlock, fn, functionIndexByName,
+             localIndexBySlotId, arrayBaseLocalIndexBySlotId, bumpGlobalIndex,
+             structBaseLocalIndexBySlotId),
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 347
+Line       :   // local — reusing the SAME arrayBaseLocalIndexBySlotId already
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 352
+Line       :         const returnedArrayBaseLocalIndex =
+             arrayBaseLocalIndexBySlotId.get(terminator.value.arraySlot!);
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 358
+Line       :     : encodeExpr(terminator.value.id, instructionsById, functionIndexByName, fn,
+             localIndexBySlotId, arrayBaseLocalIndexBySlotId, structBaseLocalIndexBySlotId);
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 360
+Line       :     encodeStatements(block, instructionsById, functionIndexByName, fn,
+             localIndexBySlotId, arrayBaseLocalIndexBySlotId, bumpGlobalIndex, undefined,
+             structBaseLocalIndexBySlotId),
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 378
+Line       : function encodeIfElseFunctionBody(fn: IRFunction, functionIndexByName:
+             ReadonlyMap<string, number>, localIndexBySlotId: ReadonlyMap<number, number> = new
+             Map(), arrayBaseLocalIndexBySlotId: ReadonlyMap<number, number> = new Map(),
+             bumpGlobalIndex = 0, structBaseLocalIndexBySlotId: ReadonlyMap<number, number> =
+             new Map()): Uint8Array {
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 439
+Line       :   // stores)") - including the SAME shared allocatedArraySlots/
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 451
+Line       :   const allocatedArraySlots = new Set<number>();
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 459
+Line       :     encodeStatements(entry, entryInstructionsById, functionIndexByName, fn,
+             localIndexBySlotId, arrayBaseLocalIndexBySlotId, bumpGlobalIndex,
+             allocatedArraySlots, structBaseLocalIndexBySlotId, allocatedStructSlots),
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 460
+Line       :     encodeExpr(entryTerminator.condition.id, entryInstructionsById,
+             functionIndexByName, fn, localIndexBySlotId, arrayBaseLocalIndexBySlotId,
+             structBaseLocalIndexBySlotId),
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 462
+Line       :     encodeReturnBlockBody(thenBlock, fn, functionIndexByName, localIndexBySlotId,
+             arrayBaseLocalIndexBySlotId, bumpGlobalIndex, structBaseLocalIndexBySlotId),
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 464
+Line       :     encodeReturnBlockBody(elseBlock, fn, functionIndexByName, localIndexBySlotId,
+             arrayBaseLocalIndexBySlotId, bumpGlobalIndex, structBaseLocalIndexBySlotId),
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 482
+Line       : function encodeIfElseMergeFunctionBody(fn: IRFunction, functionIndexByName:
+             ReadonlyMap<string, number>, localIndexBySlotId: ReadonlyMap<number, number>,
+             arrayBaseLocalIndexBySlotId: ReadonlyMap<number, number> = new Map(),
+             bumpGlobalIndex = 0, structBaseLocalIndexBySlotId: ReadonlyMap<number, number> =
+             new Map()): Uint8Array {
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 517
+Line       :   const allocatedArraySlots = new Set<number>();
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 525
+Line       :     encodeStatements(entry, entryInstructionsById, functionIndexByName, fn,
+             localIndexBySlotId, arrayBaseLocalIndexBySlotId, bumpGlobalIndex,
+             allocatedArraySlots, structBaseLocalIndexBySlotId, allocatedStructSlots),
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 526
+Line       :     encodeExpr(entryTerminator.condition.id, entryInstructionsById,
+             functionIndexByName, fn, localIndexBySlotId, arrayBaseLocalIndexBySlotId,
+             structBaseLocalIndexBySlotId),
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 528
+Line       :     encodeStatements(thenBlock, thenInstructionsById, functionIndexByName, fn,
+             localIndexBySlotId, arrayBaseLocalIndexBySlotId, bumpGlobalIndex,
+             allocatedArraySlots, structBaseLocalIndexBySlotId, allocatedStructSlots),
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 530
+Line       :     encodeStatements(elseBlock, elseInstructionsById, functionIndexByName, fn,
+             localIndexBySlotId, arrayBaseLocalIndexBySlotId, bumpGlobalIndex,
+             allocatedArraySlots, structBaseLocalIndexBySlotId, allocatedStructSlots),
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 532
+Line       :     encodeStatements(mergeBlock, mergeInstructionsById, functionIndexByName, fn,
+             localIndexBySlotId, arrayBaseLocalIndexBySlotId, bumpGlobalIndex,
+             allocatedArraySlots, structBaseLocalIndexBySlotId, allocatedStructSlots),
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 533
+Line       :     encodeExpr(mergeBlock.terminator.value.id, mergeInstructionsById,
+             functionIndexByName, fn, localIndexBySlotId, arrayBaseLocalIndexBySlotId,
+             structBaseLocalIndexBySlotId),
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 546
+Line       : function encodeWhileFunctionBody(fn: IRFunction, functionIndexByName:
+             ReadonlyMap<string, number>, localIndexBySlotId: ReadonlyMap<number, number>,
+             arrayBaseLocalIndexBySlotId: ReadonlyMap<number, number> = new Map(),
+             bumpGlobalIndex = 0, structBaseLocalIndexBySlotId: ReadonlyMap<number, number> =
+             new Map()): Uint8Array {
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 576
+Line       :   const allocatedArraySlots = new Set<number>();
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 587
+Line       :     encodeStatements(entry, entryInstructionsById, functionIndexByName, fn,
+             localIndexBySlotId, arrayBaseLocalIndexBySlotId, bumpGlobalIndex,
+             allocatedArraySlots, structBaseLocalIndexBySlotId, allocatedStructSlots),
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 590
+Line       :     encodeExpr(headerTerminator.condition.id, headerInstructionsById,
+             functionIndexByName, fn, localIndexBySlotId, arrayBaseLocalIndexBySlotId,
+             structBaseLocalIndexBySlotId),
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 593
+Line       :     encodeStatements(loopBody, bodyInstructionsById, functionIndexByName, fn,
+             localIndexBySlotId, arrayBaseLocalIndexBySlotId, bumpGlobalIndex,
+             allocatedArraySlots, structBaseLocalIndexBySlotId, allocatedStructSlots),
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 597
+Line       :     encodeStatements(loopExit, exitInstructionsById, functionIndexByName, fn,
+             localIndexBySlotId, arrayBaseLocalIndexBySlotId, bumpGlobalIndex,
+             allocatedArraySlots, structBaseLocalIndexBySlotId, allocatedStructSlots),
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 598
+Line       :     encodeExpr(loopExit.terminator.value.id, exitInstructionsById,
+             functionIndexByName, fn, localIndexBySlotId, arrayBaseLocalIndexBySlotId,
+             structBaseLocalIndexBySlotId),
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 836
+Line       :   const arrayBaseLocalIndexBySlotId = new Map(arraySlots.map((l, i) => [l.id,
+             i64LocalCount + i] as const));
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 852
+Line       :     arrayBaseLocalIndexBySlotId.set(local.id, paramIndex);
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 857
+Line       :   // arrayBaseLocalIndexBySlotId already gets, mirrored precisely.
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 862
+Line       :   // the exact same treatment arrayBaseLocalIndexBySlotId/
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 924
+Line       :     bodyExpr = encodeReturnBlockBody(fn.blocks[0]!, fn, functionIndexByName,
+             localIndexBySlotId, arrayBaseLocalIndexBySlotId, bumpGlobalIndex,
+             structBaseLocalIndexBySlotId);
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 926
+Line       :     bodyExpr = encodeIfElseFunctionBody(fn, functionIndexByName,
+             localIndexBySlotId, arrayBaseLocalIndexBySlotId, bumpGlobalIndex,
+             structBaseLocalIndexBySlotId);
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 944
+Line       :         encodeReturnBlockBody(entry, fn, functionIndexByName, localIndexBySlotId,
+             arrayBaseLocalIndexBySlotId, bumpGlobalIndex, structBaseLocalIndexBySlotId),
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 968
+Line       :       bodyExpr = encodeIfElseMergeFunctionBody(fn, functionIndexByName,
+             localIndexBySlotId, arrayBaseLocalIndexBySlotId, bumpGlobalIndex,
+             structBaseLocalIndexBySlotId);
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 970
+Line       :       bodyExpr = encodeWhileFunctionBody(fn, functionIndexByName,
+             localIndexBySlotId, arrayBaseLocalIndexBySlotId, bumpGlobalIndex,
+             structBaseLocalIndexBySlotId);
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 973
+Line       :         encodeReturnBlockBody(entry, fn, functionIndexByName, localIndexBySlotId,
+             arrayBaseLocalIndexBySlotId, bumpGlobalIndex, structBaseLocalIndexBySlotId),
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 1296
+Line       : function encodeExpr(id: number, instructionsById: ReadonlyMap<number,
+             IRInstruction>, functionIndexByName: ReadonlyMap<string, number>, fn: IRFunction,
+             localIndexBySlotId: ReadonlyMap<number, number> = new Map(),
+             arrayBaseLocalIndexBySlotId: ReadonlyMap<number, number> = new Map(),
+             structBaseLocalIndexBySlotId: ReadonlyMap<number, number> = new Map()): Uint8Array
+             {
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 1302
+Line       :   return encodeExprRaw(id, instructionsById, functionIndexByName, fn,
+             localIndexBySlotId, arrayBaseLocalIndexBySlotId, structBaseLocalIndexBySlotId);
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 1305
+Line       : function encodeExprRaw(id: number, instructionsById: ReadonlyMap<number,
+             IRInstruction>, functionIndexByName: ReadonlyMap<string, number>, fn: IRFunction,
+             localIndexBySlotId: ReadonlyMap<number, number> = new Map(),
+             arrayBaseLocalIndexBySlotId: ReadonlyMap<number, number> = new Map(),
+             structBaseLocalIndexBySlotId: ReadonlyMap<number, number> = new Map()): Uint8Array
+             {
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 1356
+Line       :       encodeExpr(inst.left.id, instructionsById, functionIndexByName, fn,
+             localIndexBySlotId, arrayBaseLocalIndexBySlotId, structBaseLocalIndexBySlotId),
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 1357
+Line       :       encodeExpr(inst.right.id, instructionsById, functionIndexByName, fn,
+             localIndexBySlotId, arrayBaseLocalIndexBySlotId, structBaseLocalIndexBySlotId),
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 1370
+Line       :     const operandExpr = encodeExpr(inst.operand.id, instructionsById,
+             functionIndexByName, fn, localIndexBySlotId, arrayBaseLocalIndexBySlotId,
+             structBaseLocalIndexBySlotId);
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 1403
+Line       :         const callerBaseLocalIndex = arrayBaseLocalIndexBySlotId.get(a.arraySlot);
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 1409
+Line       :       return encodeExpr(a.id, instructionsById, functionIndexByName, fn,
+             localIndexBySlotId, arrayBaseLocalIndexBySlotId, structBaseLocalIndexBySlotId);
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 1424
+Line       :     // local (arrayBaseLocalIndexBySlotId, keyed by inst.slot — slot is
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 1450
+Line       :           encodeExpr(inst.baseRef.id, instructionsById, functionIndexByName, fn,
+             localIndexBySlotId, arrayBaseLocalIndexBySlotId, structBaseLocalIndexBySlotId),
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 1457
+Line       :           const baseLocalIndex = arrayBaseLocalIndexBySlotId.get(inst.slot);
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 1464
+Line       :     const rawIndexExpr = encodeExpr(inst.index.id, instructionsById,
+             functionIndexByName, fn, localIndexBySlotId, arrayBaseLocalIndexBySlotId);
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 1625
+Line       : function encodeStatements(block: IRBasicBlock, instructionsById:
+             ReadonlyMap<number, IRInstruction>, functionIndexByName: ReadonlyMap<string,
+             number>, fn: IRFunction, localIndexBySlotId: ReadonlyMap<number, number>,
+             arrayBaseLocalIndexBySlotId: ReadonlyMap<number, number> = new Map(),
+             bumpGlobalIndex = 0, allocatedArraySlots: Set<number> = new Set<number>(),
+             structBaseLocalIndexBySlotId: ReadonlyMap<number, number> = new Map(),
+             allocatedStructSlots: Set<number> = new Set<number>()): Uint8Array {
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 1648
+Line       :       parts.push(encodeExprRaw(inst.id, instructionsById, functionIndexByName, fn,
+             localIndexBySlotId, arrayBaseLocalIndexBySlotId, structBaseLocalIndexBySlotId));
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 1659
+Line       :       parts.push(encodeExpr(inst.value.id, instructionsById, functionIndexByName,
+             fn, localIndexBySlotId, arrayBaseLocalIndexBySlotId));
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 1679
+Line       :             encodeExpr(inst.baseRef.id, instructionsById, functionIndexByName, fn,
+             localIndexBySlotId, arrayBaseLocalIndexBySlotId, structBaseLocalIndexBySlotId),
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 1684
+Line       :       const baseLocalIndex = inst.baseRef ? baseRefScratchForStore :
+             arrayBaseLocalIndexBySlotId.get(inst.slot);
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 1694
+Line       :       // not merely by allocatedArraySlots' own tracking (which was
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 1705
+Line       :         if (!allocatedArraySlots.has(inst.slot)) {
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 1706
+Line       :           allocatedArraySlots.add(inst.slot);
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 1709
+Line       :           parts.push(encodeArrayHeaderStore(arrayBaseExprForHeader, elementCount));
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 1713
+Line       :       const rawIndexExpr = encodeExpr(inst.index.id, instructionsById,
+             functionIndexByName, fn, localIndexBySlotId, arrayBaseLocalIndexBySlotId);
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 1722
+Line       :       // arrayBaseLocalIndexBySlotId already tracks for it, requiring
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 1726
+Line       :             const innerBaseLocalIndex =
+             arrayBaseLocalIndexBySlotId.get(inst.value.arraySlot!);
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 1748
+Line       :         : encodeExpr(inst.value.id, instructionsById, functionIndexByName, fn,
+             localIndexBySlotId, arrayBaseLocalIndexBySlotId, structBaseLocalIndexBySlotId);
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 1814
+Line       :             const innerBaseLocalIndex =
+             arrayBaseLocalIndexBySlotId.get(inst.value.arraySlot!);
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 1820
+Line       :         : encodeExpr(inst.value.id, instructionsById, functionIndexByName, fn,
+             localIndexBySlotId, arrayBaseLocalIndexBySlotId, structBaseLocalIndexBySlotId);
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 1913
+Line       :                   const callerBaseLocalIndex =
+             arrayBaseLocalIndexBySlotId.get(a.arraySlot);
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 1919
+Line       :                 return encodeExpr(a.id, instructionsById, functionIndexByName, fn,
+             localIndexBySlotId, arrayBaseLocalIndexBySlotId, structBaseLocalIndexBySlotId);
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 1931
+Line       :         // SAME base-address local arrayBaseLocalIndexBySlotId already
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 1941
+Line       :           const resultLocalIndex =
+             arrayBaseLocalIndexBySlotId.get(inst.resultArraySlot);
+Filename   : emit-wasm.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\emit-wasm.ts
+Pattern    : arrayBaseLocalIndexBySlotId|allocatedArraySlots|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+
+
+
+=== 3. WASM HEADER WRITER ===
+
+
+IgnoreCase : True
+LineNumber : 20
+Line       : // ELEMENT_SIZE_IMMUTABLE_CONTRACT and MEMORY_LAYOUT_IMMUTABLE_CONTRACT
+Filename   : array-memory.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\array-memory.ts
+Pattern    : ARRAY_HEADER_SIZE|ELEMENT_SIZE|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 27
+Line       : export const ELEMENT_SIZE = 8;
+Filename   : array-memory.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\array-memory.ts
+Pattern    : ARRAY_HEADER_SIZE|ELEMENT_SIZE|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 29
+Line       : /** The size, in bytes, of an array's header (currently just the `length` field,
+             stored as one i64). Every array's data begins exactly ARRAY_HEADER_SIZE bytes
+             after its base address. */
+Filename   : array-memory.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\array-memory.ts
+Pattern    : ARRAY_HEADER_SIZE|ELEMENT_SIZE|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 30
+Line       : export const ARRAY_HEADER_SIZE = 8;
+Filename   : array-memory.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\array-memory.ts
+Pattern    : ARRAY_HEADER_SIZE|ELEMENT_SIZE|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 35
+Line       : /** WASM's memarg immediate (alignment exponent + offset) that follows every
+             load/store opcode. Alignment 3 = 2^3 = 8-byte-aligned (matching
+             ELEMENT_SIZE/ARRAY_HEADER_SIZE exactly — see MEMORY_MODEL_SPEC.md §2's alignment
+             note), offset 0 (the offset is always folded into the address expression itself,
+             never into this immediate, keeping exactly one place — the address formula — that
+             computes offsets). */
+Filename   : array-memory.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\array-memory.ts
+Pattern    : ARRAY_HEADER_SIZE|ELEMENT_SIZE|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 48
+Line       :  * Single-Formula Commitment): `arrayBase + ARRAY_HEADER_SIZE + index *
+Filename   : array-memory.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\array-memory.ts
+Pattern    : ARRAY_HEADER_SIZE|ELEMENT_SIZE|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 49
+Line       :  * ELEMENT_SIZE`. `arrayBaseExpr` and `indexExpr` are each a caller-
+Filename   : array-memory.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\array-memory.ts
+Pattern    : ARRAY_HEADER_SIZE|ELEMENT_SIZE|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 58
+Line       :     new Uint8Array([OPCODE_I32_CONST]), encodeSLEB128(BigInt(ARRAY_HEADER_SIZE)),
+Filename   : array-memory.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\array-memory.ts
+Pattern    : ARRAY_HEADER_SIZE|ELEMENT_SIZE|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 62
+Line       :     new Uint8Array([OPCODE_I32_CONST]), encodeSLEB128(BigInt(ELEMENT_SIZE)),
+Filename   : array-memory.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\array-memory.ts
+Pattern    : ARRAY_HEADER_SIZE|ELEMENT_SIZE|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 81
+Line       : // ELEMENT_SIZE=8 stays the per-slot stride regardless of how many of
+Filename   : array-memory.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\array-memory.ts
+Pattern    : ARRAY_HEADER_SIZE|ELEMENT_SIZE|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 102
+Line       : export function encodeArrayHeaderStore(arrayBaseExpr: Uint8Array, length: number):
+             Uint8Array {
+Filename   : array-memory.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\array-memory.ts
+Pattern    : ARRAY_HEADER_SIZE|ELEMENT_SIZE|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 111
+Line       :  * array's total size (`ARRAY_HEADER_SIZE + elementCount * ELEMENT_SIZE`
+Filename   : array-memory.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\array-memory.ts
+Pattern    : ARRAY_HEADER_SIZE|ELEMENT_SIZE|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 116
+Line       :   const totalSize = ARRAY_HEADER_SIZE + elementCount * ELEMENT_SIZE;
+Filename   : array-memory.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\array-memory.ts
+Pattern    : ARRAY_HEADER_SIZE|ELEMENT_SIZE|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 154
+Line       :  *  V29-D2: the runtime-length counterpart to `encodeArrayHeaderStore`
+Filename   : array-memory.ts
+Path       : D:\ur-bridge-v27-final\src\backend\wasm\array-memory.ts
+Pattern    : ARRAY_HEADER_SIZE|ELEMENT_SIZE|encodeArrayHeaderStore
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+
+
+**********************
+Windows PowerShell transcript end
+End time: 20261024223129
+**********************

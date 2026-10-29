@@ -1,0 +1,9 @@
+CFG for main (4 blocks):
+  BB0 (entry) [entry] — 4 instruction(s), terminator: cond_branch
+    -> BB1
+    -> BB2
+  BB1 (then) — 2 instruction(s), terminator: branch
+    -> BB3
+  BB2 (else) — 2 instruction(s), terminator: branch
+    -> BB3
+  BB3 (merge) — 1 instruction(s), terminator: return

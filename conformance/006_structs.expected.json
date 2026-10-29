@@ -1,0 +1,21 @@
+{
+  "name": "006_structs",
+  "parseDiagnostics": [],
+  "typecheckDiagnostics": [],
+  "lowerOk": true,
+  "lowerDiagnostics": [],
+  "irSummary": {
+    "functionCount": 1,
+    "instructionKindCounts": {
+      "const": 2,
+      "field_store": 2,
+      "field_load": 2,
+      "binop": 1
+    }
+  },
+  "cCompiles": true,
+  "cRuntimeExitCode": 7,
+  "wasmAccepted": true,
+  "wasmRejectionMessage": null,
+  "wasmRuntimeResult": "7"
+}

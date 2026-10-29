@@ -1,0 +1,41 @@
+
+  JS Bridge (Runtime Bridge) - real full chain to require('sharp'), no simulation
+    ✓ real property read: sharp.format returns the real, full set of supported image formats from the actual library
+    ✓ real function call: sharp.cache(false) genuinely disables sharp's own real cache and returns its real prior stats object
+    ✓ callBatch(): two real calls to the real library in one real Node process invocation
+    ✓ real error handling: requiring a genuinely nonexistent module surfaces the real Node error message via { ok: false }, not a crash
+
+────────────────────────────────────────
+Tests:  4 total
+Passed: 4
+Failed: 0
+
+✅ All 4 tests passed
+
+  JS Bridge generality: a real, independent CommonJS module and a real ES Module, neither related to sharp
+    ✓ real CommonJS module (.cjs, module.exports): sum(2,3) = 5
+    ✓ real CommonJS module: sub(10,4) = 6 and mul(6,7) = 42, via callBatch
+    ✓ real ES Module (.mjs, genuine export syntax): sum(2,3) = 5
+    ✓ real ES Module: sub(10,4) = 6 and mul(6,7) = 42, via callBatch
+    ✓ REAL FINDING confirmed by a permanent test: a plain .js file in this repo is NOT loadable as CommonJS, because this project's own package.json has "type": "module" - require()/import() treat it as ESM regardless of module.exports syntax inside it. This is why calculator-cjs.cjs needed the explicit .cjs extension.
+
+────────────────────────────────────────
+Tests:  5 total
+Passed: 5
+Failed: 0
+
+✅ All 5 tests passed
+
+  JS Bridge: additional export-pattern coverage
+    ✓ default-only export: default(name) works via propertyPath ['default']
+    ✓ named-only export: a named function and a named constant both work
+    ✓ mixed default + named exports: both are independently reachable from the same module
+    ✓ REAL, DOCUMENTED CURRENT BEHAVIOR for an async function (Async support remains a deferred Bridge Extension): calling it through the Core API returns the real Promise object itself, unresolved - not the eventual value, and not an error. This is disclosed as the honest current behavior, not silently hidden.
+    ✓ a real npm package with a real "exports" map (docx, confirmed present in this environment) loads and calls a real export correctly, via its own real sub-path entry (bare package-name resolution via import() is a separate, disclosed Node-level constraint, not attempted here - NODE_PATH does not affect ESM resolution)
+
+────────────────────────────────────────
+Tests:  5 total
+Passed: 5
+Failed: 0
+
+✅ All 5 tests passed

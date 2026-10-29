@@ -1,0 +1,297 @@
+{
+  "moduleName": "20-struct-construction-access",
+  "functions": [
+    {
+      "qualifiedName": "ur_20_struct_construction_access_main",
+      "sourceName": "main",
+      "params": [],
+      "returnType": "i64",
+      "blocks": [
+        {
+          "id": 0,
+          "label": "entry",
+          "instructions": [
+            {
+              "kind": "const",
+              "id": 0,
+              "type": "i64",
+              "value": {
+                "kind": "const_int",
+                "value": "3n"
+              },
+              "location": {
+                "file": "program.ur",
+                "start": {
+                  "line": 7,
+                  "column": 17
+                },
+                "end": {
+                  "line": 7,
+                  "column": 17
+                }
+              }
+            },
+            {
+              "kind": "field_store",
+              "slot": 0,
+              "fieldIndex": 0,
+              "value": {
+                "id": 0
+              },
+              "location": {
+                "file": "program.ur",
+                "start": {
+                  "line": 7,
+                  "column": 3
+                },
+                "end": {
+                  "line": 7,
+                  "column": 21
+                }
+              }
+            },
+            {
+              "kind": "const",
+              "id": 1,
+              "type": "i64",
+              "value": {
+                "kind": "const_int",
+                "value": "4n"
+              },
+              "location": {
+                "file": "program.ur",
+                "start": {
+                  "line": 7,
+                  "column": 20
+                },
+                "end": {
+                  "line": 7,
+                  "column": 20
+                }
+              }
+            },
+            {
+              "kind": "field_store",
+              "slot": 0,
+              "fieldIndex": 1,
+              "value": {
+                "id": 1
+              },
+              "location": {
+                "file": "program.ur",
+                "start": {
+                  "line": 7,
+                  "column": 3
+                },
+                "end": {
+                  "line": 7,
+                  "column": 21
+                }
+              }
+            },
+            {
+              "kind": "field_load",
+              "id": 2,
+              "type": "i64",
+              "slot": 0,
+              "fieldIndex": 0,
+              "location": {
+                "file": "program.ur",
+                "start": {
+                  "line": 8,
+                  "column": 10
+                },
+                "end": {
+                  "line": 8,
+                  "column": 12
+                }
+              }
+            },
+            {
+              "kind": "field_load",
+              "id": 3,
+              "type": "i64",
+              "slot": 0,
+              "fieldIndex": 1,
+              "location": {
+                "file": "program.ur",
+                "start": {
+                  "line": 8,
+                  "column": 16
+                },
+                "end": {
+                  "line": 8,
+                  "column": 18
+                }
+              }
+            },
+            {
+              "kind": "binop",
+              "id": 4,
+              "type": "i64",
+              "op": "add",
+              "left": {
+                "id": 2
+              },
+              "right": {
+                "id": 3
+              },
+              "location": {
+                "file": "program.ur",
+                "start": {
+                  "line": 8,
+                  "column": 10
+                },
+                "end": {
+                  "line": 8,
+                  "column": 18
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "kind": "return",
+            "value": {
+              "id": 4
+            },
+            "location": {
+              "file": "program.ur",
+              "start": {
+                "line": 8,
+                "column": 3
+              },
+              "end": {
+                "line": 8,
+                "column": 18
+              }
+            }
+          }
+        }
+      ],
+      "entryBlock": 0,
+      "location": {
+        "file": "program.ur",
+        "start": {
+          "line": 6,
+          "column": 1
+        },
+        "end": {
+          "line": 9,
+          "column": 3
+        }
+      },
+      "locals": [
+        {
+          "id": 0,
+          "name": "p",
+          "type": "void",
+          "structLayout": {
+            "structName": "Point",
+            "fields": [
+              {
+                "name": "x",
+                "type": "i64",
+                "offset": 0
+              },
+              {
+                "name": "y",
+                "type": "i64",
+                "offset": 8
+              }
+            ],
+            "size": 16,
+            "alignment": 8
+          }
+        }
+      ]
+    }
+  ],
+  "externs": [
+    {
+      "name": "ur_runtime_init",
+      "returnType": "void",
+      "parameterTypes": [
+        "i64"
+      ],
+      "callingConvention": "c",
+      "kind": "runtime",
+      "lifecycleRole": "init"
+    },
+    {
+      "name": "ur_runtime_shutdown",
+      "returnType": "void",
+      "parameterTypes": [],
+      "callingConvention": "c",
+      "kind": "runtime",
+      "lifecycleRole": "shutdown"
+    },
+    {
+      "name": "ur_print_int",
+      "returnType": "void",
+      "parameterTypes": [
+        "i64"
+      ],
+      "callingConvention": "c",
+      "kind": "runtime",
+      "lifecycleRole": "none"
+    },
+    {
+      "name": "ur_print_float",
+      "returnType": "void",
+      "parameterTypes": [
+        "f64"
+      ],
+      "callingConvention": "c",
+      "kind": "runtime",
+      "lifecycleRole": "none"
+    },
+    {
+      "name": "ur_print_bool",
+      "returnType": "void",
+      "parameterTypes": [
+        "bool"
+      ],
+      "callingConvention": "c",
+      "kind": "runtime",
+      "lifecycleRole": "none"
+    },
+    {
+      "name": "ur_print_string",
+      "returnType": "void",
+      "parameterTypes": [
+        "string"
+      ],
+      "callingConvention": "c",
+      "kind": "runtime",
+      "lifecycleRole": "none"
+    },
+    {
+      "name": "ur_input_string",
+      "returnType": "string",
+      "parameterTypes": [],
+      "callingConvention": "c",
+      "kind": "runtime",
+      "lifecycleRole": "none"
+    },
+    {
+      "name": "ur_free",
+      "returnType": "void",
+      "parameterTypes": [
+        "string"
+      ],
+      "callingConvention": "c",
+      "kind": "runtime",
+      "lifecycleRole": "none"
+    },
+    {
+      "name": "ur_panic",
+      "returnType": "void",
+      "parameterTypes": [
+        "string"
+      ],
+      "callingConvention": "c",
+      "kind": "runtime",
+      "lifecycleRole": "none"
+    }
+  ]
+}

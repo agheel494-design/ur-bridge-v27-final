@@ -1,0 +1,505 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// UR-Bridge — Type System: Type Checker
+//
+// Import discipline:
+//   `import type { ... }` for pure TypeScript interfaces/type-aliases
+//   `import { ... }`      for runtime constants, classes, functions
+// ─────────────────────────────────────────────────────────────────────────────
+
+// AST types are pure TypeScript interfaces — import type only.
+import type {
+  Program, FunctionDecl,
+  Statement, BlockStatement, VariableDeclaration, Assignment,
+  IfStatement, ReturnStatement,
+  Expression, SourceSpan,
+} from "../frontend/ast.js";
+
+// URType is a TypeScript discriminated union (type alias) → import type.
+import type { URType, StructType } from "./types.js";
+
+// Runtime values from types.ts.
+import {
+  T_INT, T_FLOAT, T_BOOL, T_STRING, T_CHAR,
+  T_UNKNOWN, T_ERROR,
+  tFunction, tOptional, tArray, tStruct,
+  typeToString, isError,
+} from "./types.js";
+
+import { TypeEnv, resolveOptionalTypeRef } from "./type-env.js";
+import { isAssignable, binaryOpResultType, unaryOpResultType } from "./compatibility.js";
+import {
+  makeTypeResult, typeError, TCODES,
+} from "./type-diagnostics.js";
+import type { TypeCheckResult, TypeDiagnostic } from "./type-diagnostics.js";
+
+// ── Checker ────────────────────────────────────────────────────────────────────
+
+class TypeChecker {
+  private diags: TypeDiagnostic[] = [];
+  /** Level 2.8 struct type registry, populated at the start of check(). */
+  private structTypes = new Map<string, URType>();
+
+  // ── Entry point ────────────────────────────────────────────────────────────
+
+  check(program: Program, externalStructTypes?: ReadonlyMap<string, URType>): TypeCheckResult {
+    const globalEnv = new TypeEnv();
+
+    // Hoist struct type definitions (Level 2.8, LANGUAGE_SYNTAX_1_1_SPEC.md
+    // §2). A separate map from globalEnv — structs are TYPES, not values,
+    // so they don't belong in the value environment. Field types are
+    // resolved via the same resolveOptionalTypeRef used everywhere else;
+    // an unresolvable field type (already flagged by Semantic's SE6001)
+    // becomes T_UNKNOWN here rather than a duplicate diagnostic.
+    const structTypes = new Map<string, URType>();
+    for (const s of program.structs) {
+      const fields = s.fields.map(f => ({
+        name: f.name,
+        // Gate R1.5: pass structTypes here too — every OTHER call site
+        // in this file already does (lines below: globals, params,
+        // return types, let-statements). This ONE call site, inside
+        // the very loop that BUILDS structTypes, omitted it — the
+        // exact, proven (Gate R1.4) root cause of every struct-typed
+        // field resolving to an Error type instead of the real
+        // referenced struct, which toIRType() then maps to "void",
+        // producing the "field has type 'void'" compiler crash.
+        type: resolveOptionalTypeRef(f.type, name => this.unknownType(name, f.span), structTypes),
+      }));
+      structTypes.set(s.name, tStruct(s.name, fields));
+    }
+    // Real cross-module wiring (Blocker 4, per explicit direction):
+    // merge in struct/type-alias types exported by imported modules
+    // (pre-resolved by the caller, typically via ModuleRegistry).
+    // Local declarations take precedence on a name collision (checked
+    // first, so a local struct of the same name is never silently
+    // shadowed by an external one).
+    if (externalStructTypes) {
+      for (const [name, ty] of externalStructTypes) {
+        if (!structTypes.has(name)) structTypes.set(name, ty);
+      }
+    }
+    this.structTypes = structTypes;
+
+    // Hoist global variable types
+    for (const g of program.globals) {
+      const ty = resolveOptionalTypeRef(g.type, name => this.unknownType(name, g.span), this.structTypes);
+      globalEnv.set(g.name, ty);
+    }
+
+    // Hoist function signatures
+    for (const fn of program.functions) {
+      const paramTypes = fn.params.map(p =>
+        resolveOptionalTypeRef(p.type, name => this.unknownType(name, p.span), this.structTypes));
+      const retType = resolveOptionalTypeRef(fn.returnType, name => this.unknownType(name, fn.span), this.structTypes);
+      globalEnv.set(fn.name, tFunction(paramTypes, retType));
+    }
+
+    // Check global initializers
+    for (const g of program.globals) {
+      if (g.initializer) {
+        const initTy = this.inferExpr(g.initializer, globalEnv);
+        const declaredTy = globalEnv.get(g.name) ?? T_UNKNOWN;
+        if (!isError(initTy) && declaredTy.kind !== "Unknown" && !isError(declaredTy)) {
+          if (!isAssignable(initTy, declaredTy)) {
+            this.diags.push(typeError(TCODES.ASSIGN_TYPE_MISMATCH,
+              `type mismatch in global '${g.name}': cannot assign ${typeToString(initTy)} to ${typeToString(declaredTy)}`,
+              g.span));
+          }
+        }
+      }
+    }
+
+    for (const fn of program.functions) this.checkFunction(fn, globalEnv);
+    return makeTypeResult(this.diags);
+  }
+
+  // ── Function ───────────────────────────────────────────────────────────────
+
+  private checkFunction(fn: FunctionDecl, parentEnv: TypeEnv): void {
+    const env = parentEnv.child();
+    const retType = resolveOptionalTypeRef(fn.returnType, name => this.unknownType(name, fn.span), this.structTypes);
+    for (const p of fn.params) {
+      env.set(p.name, resolveOptionalTypeRef(p.type, name => this.unknownType(name, p.span), this.structTypes));
+    }
+    this.checkBlock(fn.body, env, retType);
+
+    // BUG-SA-002 fix: minimal, AST-level reachability check - NOT a
+    // port of lowerToIR's own CG1001 logic, which is built on IR
+    // basic-block/terminator state that doesn't exist at this stage.
+    // This is a separate, simpler implementation of the same rule,
+    // matching the exact behavior already confirmed correct in the
+    // Coverage Map's own extended Functions axis (2.8-2.11): full
+    // if/else where both branches return counts; a bare while loop
+    // followed by a real return counts (the loop itself is never
+    // required to return); void functions (retType.kind==="Unknown")
+    // are exempt, same as the existing IR-level check.
+    if (retType.kind !== "Unknown" && !this.allPathsReturn(fn.body)) {
+      this.diags.push(typeError(
+        TCODES.MISSING_RETURN,
+        `function '${fn.name}' does not end with an explicit return statement on every path`,
+        fn.span,
+      ));
+    }
+  }
+
+  /** True iff this block is guaranteed to return on every path through it. */
+  private allPathsReturn(block: BlockStatement): boolean {
+    if (block.statements.length === 0) return false;
+    const last = block.statements[block.statements.length - 1]!;
+    return this.statementAlwaysReturns(last);
+  }
+
+  /**
+   * True iff this branch (either a real block, or - for else-if
+   * chains - a nested IfStatement directly) is guaranteed to return.
+   * Real discovery while implementing this: IfStatement's own
+   * elseBranch type is `IfStatement | BlockStatement`, not
+   * BlockStatement alone (an else-if chain nests IfStatement
+   * directly, not wrapped in a block) - confirmed via tsc, not
+   * assumed.
+   */
+  private branchAlwaysReturns(branch: BlockStatement | IfStatement): boolean {
+    return branch.kind === "IfStatement" ? this.statementAlwaysReturns(branch) : this.allPathsReturn(branch);
+  }
+
+  private statementAlwaysReturns(stmt: Statement): boolean {
+    switch (stmt.kind) {
+      case "ReturnStatement":
+        return true;
+      case "BlockStatement":
+        return this.allPathsReturn(stmt);
+      case "IfStatement":
+        // Both branches must be present AND both must always return -
+        // matches the exact rule already confirmed correct for
+        // scenario 2.8 (both branches return) vs 2.7 (no else - a
+        // real gap, correctly still flagged here).
+        return stmt.elseBranch !== undefined &&
+          this.branchAlwaysReturns(stmt.thenBranch) &&
+          this.branchAlwaysReturns(stmt.elseBranch);
+      default:
+        // while/for loops are deliberately NOT treated as always
+        // returning, even if their own body always returns - a loop
+        // may never execute. Matches scenario 2.9 (while + return
+        // after it, not inside it, is what actually satisfies this).
+        return false;
+    }
+  }
+
+  // ── Statements ─────────────────────────────────────────────────────────────
+
+  private checkBlock(block: BlockStatement, env: TypeEnv, retType: URType): void {
+    const blockEnv = env.child();
+    for (const stmt of block.statements) this.checkStatement(stmt, blockEnv, retType);
+  }
+
+  private checkStatement(stmt: Statement, env: TypeEnv, retType: URType): void {
+    switch (stmt.kind) {
+      case "BlockStatement":
+        this.checkBlock(stmt, env, retType);
+        break;
+
+      case "VariableDeclaration":
+        this.checkVarDecl(stmt, env);
+        break;
+
+      case "Assignment":
+        this.checkAssignment(stmt, env);
+        break;
+
+      case "IfStatement":
+        this.checkIf(stmt, env, retType);
+        break;
+
+      case "WhileStatement":
+        this.checkCondition(stmt.condition, env);
+        this.checkBlock(stmt.body, env, retType);
+        break;
+
+      case "ForStatement": {
+        this.inferExpr(stmt.iterable, env);
+        const forEnv = env.child();
+        forEnv.set(stmt.binding, T_UNKNOWN);
+        this.checkBlock(stmt.body, forEnv, retType);
+        break;
+      }
+
+      case "SwitchStatement":
+        this.inferExpr(stmt.discriminant, env);
+        for (const c of stmt.cases) {
+          if (c.test) this.inferExpr(c.test, env);
+          const caseEnv = env.child();
+          for (const s of c.body) this.checkStatement(s, caseEnv, retType);
+        }
+        break;
+
+      case "TryCatchStatement":
+        this.checkBlock(stmt.tryBlock, env, retType);
+        if (stmt.catchBlock) {
+          const catchEnv = env.child();
+          if (stmt.catchParam) catchEnv.set(stmt.catchParam, T_UNKNOWN);
+          this.checkBlock(stmt.catchBlock, catchEnv, retType);
+        }
+        if (stmt.finallyBlock) this.checkBlock(stmt.finallyBlock, env, retType);
+        break;
+
+      case "BreakStatement":
+      case "ContinueStatement":
+        break;
+
+      case "ReturnStatement":
+        this.checkReturn(stmt, env, retType);
+        break;
+
+      case "ExpressionStatement":
+        this.inferExpr(stmt.expression, env);
+        break;
+    }
+  }
+
+  private checkVarDecl(stmt: VariableDeclaration, env: TypeEnv): void {
+    const declaredTy = resolveOptionalTypeRef(stmt.type, name => this.unknownType(name, stmt.span), this.structTypes);
+    let resolvedTy: URType = declaredTy;
+    if (stmt.initializer) {
+      let initTy: URType;
+
+      if (
+        declaredTy.kind === "Array" &&
+        stmt.initializer.kind === "ArrayLiteral" &&
+        stmt.initializer.elements.length === 0
+      ) {
+        initTy = declaredTy;
+      } else {
+        initTy = this.inferExpr(stmt.initializer, env);
+      }
+      if (!isError(initTy) && declaredTy.kind !== "Unknown" && !isError(declaredTy)) {
+        if (!isAssignable(initTy, declaredTy)) {
+          this.diags.push(typeError(TCODES.ASSIGN_TYPE_MISMATCH,
+            `cannot assign ${typeToString(initTy)} to '${stmt.name}: ${typeToString(declaredTy)}'`,
+            stmt.span));
+          resolvedTy = T_ERROR;
+        }
+      } else if (declaredTy.kind === "Unknown") {
+        resolvedTy = initTy; // infer type from initializer
+      }
+    }
+    env.set(stmt.name, resolvedTy);
+  }
+
+  private checkAssignment(stmt: Assignment, env: TypeEnv): void {
+    const valueTy = this.inferExpr(stmt.value, env);
+    if (stmt.target.kind === "Identifier") {
+      const targetTy = env.get(stmt.target.name);
+      if (targetTy && !isError(targetTy) && targetTy.kind !== "Unknown" && !isError(valueTy)) {
+        if (!isAssignable(valueTy, targetTy)) {
+          this.diags.push(typeError(TCODES.ASSIGN_TYPE_MISMATCH,
+            `cannot assign ${typeToString(valueTy)} to '${stmt.target.name}: ${typeToString(targetTy)}'`,
+            stmt.span));
+        }
+      }
+    } else {
+      this.inferExpr(stmt.target, env);
+    }
+  }
+
+  private checkIf(stmt: IfStatement, env: TypeEnv, retType: URType): void {
+    this.checkCondition(stmt.condition, env);
+    this.checkBlock(stmt.thenBranch, env, retType);
+    if (stmt.elseBranch) {
+      stmt.elseBranch.kind === "BlockStatement"
+        ? this.checkBlock(stmt.elseBranch, env, retType)
+        : this.checkIf(stmt.elseBranch, env, retType);
+    }
+  }
+
+  private checkCondition(expr: Expression, env: TypeEnv): void {
+    const ty = this.inferExpr(expr, env);
+    if (!isError(ty) && ty.kind !== "Unknown" &&
+        !(ty.kind === "Primitive" && ty.name === "Bool")) {
+      this.diags.push(typeError(TCODES.CONDITION_NOT_BOOL,
+        `condition must be Bool, got ${typeToString(ty)}`,
+        expr.span));
+    }
+  }
+
+  private checkReturn(stmt: ReturnStatement, env: TypeEnv, retType: URType): void {
+    if (!stmt.value) return;
+    const valTy = this.inferExpr(stmt.value, env);
+    // Native Pointer ABI Gate A (Type Design, authorized, narrow scope):
+    // the integer literal `0` specifically (not any Int expression in
+    // general — checked against the AST node itself, not just its
+    // inferred type) is treated as the null-pointer sentinel when the
+    // declared return type is NativePtr, matching the universal C
+    // convention (NULL == 0). This is deliberately NARROWER than a
+    // general "Int is assignable to NativePtr" rule, which would let a
+    // program fabricate an arbitrary fake pointer value from any
+    // integer expression (e.g. `return 42`) - a real security-relevant
+    // decision explicitly NOT made here, left for its own future
+    // design step if ever needed. This narrow rule exists specifically
+    // so a signatures.ur placeholder body (`return 0`, never actually
+    // executed for a real external/native function, exactly the same
+    // convention already used by every other admitted type) can
+    // type-check without requiring a broader coercion rule.
+    if (retType.kind === "Primitive" && retType.name === "NativePtr"
+        && stmt.value.kind === "IntLiteral" && stmt.value.value === 0) {
+      return;
+    }
+    if (!isError(valTy) && retType.kind !== "Unknown" && !isError(retType)) {
+      if (!isAssignable(valTy, retType)) {
+        this.diags.push(typeError(TCODES.RETURN_TYPE_MISMATCH,
+          `cannot return ${typeToString(valTy)}, expected ${typeToString(retType)}`,
+          stmt.span));
+      }
+    }
+  }
+
+  // ── Expression inference ───────────────────────────────────────────────────
+
+  inferExpr(expr: Expression, env: TypeEnv): URType {
+    switch (expr.kind) {
+      case "IntLiteral":    return T_INT;
+      case "FloatLiteral":  return T_FLOAT;
+      case "BoolLiteral":   return T_BOOL;
+      case "StringLiteral": return T_STRING;
+      case "CharLiteral":   return T_CHAR;
+      case "NullLiteral":   return tOptional(T_UNKNOWN);
+
+      case "ArrayLiteral": {
+        if (expr.elements.length === 0) {
+          this.diags.push(typeError(TCODES.EMPTY_ARRAY_LITERAL,
+            `empty array literal '[]' is not supported in this phase — its element type cannot be determined without an explicit type annotation (not yet supported)`,
+            expr.span));
+          return tArray(T_ERROR);
+        }
+        const firstTy = this.inferExpr(expr.elements[0]!, env);
+        for (let i = 1; i < expr.elements.length; i++) {
+          const elTy = this.inferExpr(expr.elements[i]!, env);
+          if (!isError(elTy) && !isError(firstTy) && !isAssignable(elTy, firstTy)) {
+            this.diags.push(typeError(TCODES.ARRAY_ELEMENT_TYPE_MISMATCH,
+              `array element ${i + 1} has type ${typeToString(elTy)}, expected ${typeToString(firstTy)} (from element 1)`,
+              expr.elements[i]!.span));
+          }
+        }
+        return tArray(firstTy);
+      }
+
+      case "Identifier": {
+        if (expr.name === "<error>") return T_ERROR;
+        return env.get(expr.name) ?? T_UNKNOWN;
+      }
+
+      case "UnaryExpression": {
+        const operandTy = this.inferExpr(expr.operand, env);
+        const result = unaryOpResultType(expr.operator, operandTy);
+        if (isError(result) && !isError(operandTy)) {
+          this.diags.push(typeError(TCODES.UNARY_TYPE_ERROR,
+            `operator '${expr.operator}' cannot be applied to ${typeToString(operandTy)}`,
+            expr.span));
+        }
+        return result;
+      }
+
+      case "BinaryExpression": {
+        const leftTy  = this.inferExpr(expr.left, env);
+        const rightTy = this.inferExpr(expr.right, env);
+        const result  = binaryOpResultType(expr.operator, leftTy, rightTy);
+        if (isError(result) && !isError(leftTy) && !isError(rightTy)) {
+          this.diags.push(typeError(TCODES.OPERATOR_TYPE_ERROR,
+            `operator '${expr.operator}' cannot be applied to ${typeToString(leftTy)} and ${typeToString(rightTy)}`,
+            expr.span));
+        }
+        return result;
+      }
+
+      case "ConditionalExpression": {
+        this.checkCondition(expr.condition, env);
+        const thenTy = this.inferExpr(expr.consequent, env);
+        const elseTy = this.inferExpr(expr.alternate, env);
+        if (isAssignable(thenTy, elseTy)) return elseTy;
+        if (isAssignable(elseTy, thenTy)) return thenTy;
+        return T_UNKNOWN;
+      }
+
+      case "CallExpression": {
+        const calleeTy = this.inferExpr(expr.callee, env);
+        const argTypes = expr.args.map(a => this.inferExpr(a, env));
+        if (calleeTy.kind === "Function") {
+          for (let i = 0; i < Math.min(argTypes.length, calleeTy.params.length); i++) {
+            const argTy   = argTypes[i]!;
+            const paramTy = calleeTy.params[i]!;
+            if (!isError(argTy) && !isError(paramTy) && paramTy.kind !== "Unknown") {
+              if (!isAssignable(argTy, paramTy)) {
+                this.diags.push(typeError(TCODES.CALL_ARG_TYPE_MISMATCH,
+                  `argument ${i + 1}: cannot pass ${typeToString(argTy)} as ${typeToString(paramTy)}`,
+                  expr.args[i]!.span));
+              }
+            }
+          }
+          return calleeTy.ret;
+        }
+        // Level 2.8, LANGUAGE_SYNTAX_1_1_SPEC.md §2.7: struct construction.
+        // `expr.callee` is an ordinary Identifier here (Semantic's
+        // walkCall already validated arity via SE3001 before TypeChecker
+        // ever runs — the precondition "zero Semantic diagnostics" means
+        // arg count === field count is already guaranteed by the time
+        // this code runs for a valid program). This is the FIRST
+        // TypeChecker-level check for Aggregates, per explicit review
+        // priority: `Point("abc", 5)` must be rejected here, not left to
+        // IR/Backend to discover as a miscompilation.
+        if (expr.callee.kind === "Identifier") {
+          const structTy = this.structTypes.get(expr.callee.name);
+          if (structTy && structTy.kind === "Struct") {
+            for (let i = 0; i < Math.min(argTypes.length, structTy.fields.length); i++) {
+              const argTy   = argTypes[i]!;
+              const fieldTy = structTy.fields[i]!.type;
+              if (!isError(argTy) && !isError(fieldTy) && fieldTy.kind !== "Unknown") {
+                if (!isAssignable(argTy, fieldTy)) {
+                  this.diags.push(typeError(TCODES.CALL_ARG_TYPE_MISMATCH,
+                    `${structTy.name}(...) argument ${i + 1} ('${structTy.fields[i]!.name}'): cannot pass ${typeToString(argTy)} as ${typeToString(fieldTy)}`,
+                    expr.args[i]!.span));
+                }
+              }
+            }
+            return structTy;
+          }
+        }
+        return T_UNKNOWN;
+      }
+
+      case "MemberExpression": {
+        const objTy = this.inferExpr(expr.object, env);
+        // Level 2.8: field access (`p.x`) — resolve against the object's
+        // struct type, per LANGUAGE_SYNTAX_1_1_SPEC.md §2.2. Falls back
+        // to T_UNKNOWN for the pre-existing module-access usage (e.g.
+        // `math.add`), which is not struct-typed and was never resolved
+        // here before this phase either — no regression for that case.
+        if (objTy.kind === "Struct") {
+          const field = objTy.fields.find(f => f.name === expr.property);
+          if (field) return field.type;
+          this.diags.push(typeError(TCODES.UNKNOWN_TYPE,
+            `struct '${objTy.name}' has no field '${expr.property}'`,
+            expr.span));
+          return T_ERROR;
+        }
+        return T_UNKNOWN;
+      }
+
+      case "IndexExpression": {
+        const objTy = this.inferExpr(expr.object, env);
+        this.inferExpr(expr.index, env);
+        if (objTy.kind === "Array") return objTy.element;
+        if (objTy.kind === "Map")   return objTy.value;
+        return T_UNKNOWN;
+      }
+    }
+  }
+
+  private unknownType(name: string, span: SourceSpan): void {
+    this.diags.push(typeError(TCODES.UNKNOWN_TYPE, `unknown type '${name}'`, span));
+  }
+}
+
+// ── Public entry point ─────────────────────────────────────────────────────────
+
+export function typeCheck(program: Program, externalStructTypes?: ReadonlyMap<string, URType>): TypeCheckResult {
+  return new TypeChecker().check(program, externalStructTypes);
+}
+

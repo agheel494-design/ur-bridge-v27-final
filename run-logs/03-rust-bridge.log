@@ -1,0 +1,33 @@
+### tests/ffi/drivers/rust-bridge-mock.test.ts
+
+  RustBridgeDriver (generic, library-agnostic) - mock only, no real library required
+    ✓ call() returns { ok: true, value } for a successful call
+    ✓ call() returns { ok: false, error } uniformly for a real harness-level error, not a raw kind:'error' result
+    ✓ call() correctly passes through arguments of every supported type (i32, i64, f64, str, ptr)
+    ✓ callBatch() returns { ok: true, value: [...] } when every call succeeds
+    ✓ callBatch() returns a single { ok: false, error } if ANY call in the batch fails, not a partial/ambiguous array
+    ✓ withResource() correctly generates a create -> use -> free call sequence generically when create succeeds
+    ✓ REAL BUG FIX VERIFIED: withResource() reports { ok: false } when create returns a null (0) pointer, rather than silently treating the resource as valid
+    ✓ REAL BUG FIX VERIFIED: withResource() reports { ok: false } when create itself returns a real harness-level error
+    ✓ descriptor correctly stores the caller-supplied library name and path - no hardcoded library identity
+
+────────────────────────────────────────
+Tests:  9 total
+Passed: 9
+Failed: 0
+
+✅ All 9 tests passed
+
+### tests/ffi/drivers/rust-rav1e-proof-of-concept.test.ts
+
+  Proof of concept only (NOT part of Rust Bridge architecture): generic RustBridgeDriver calling real librav1e.so
+    ✓ generic call() correctly invokes a real Rust-compiled function (rav1e_config_default), returning { ok: true }
+    ✓ generic withResource() correctly runs a real create->use->free lifecycle against real rav1e functions, returning { ok: true }
+    ✓ REAL FIX VERIFIED against a real library: withResource() correctly reports { ok: false } for a genuinely invalid rav1e config key, rather than a misleading success
+
+────────────────────────────────────────
+Tests:  3 total
+Passed: 3
+Failed: 0
+
+✅ All 3 tests passed

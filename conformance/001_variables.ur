@@ -1,0 +1,5 @@
+function main(): int
+  let x = 5
+  let y = 10
+  return x + y
+end

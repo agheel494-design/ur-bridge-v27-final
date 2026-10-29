@@ -1,0 +1,17 @@
+{
+  "name": "009_type_alias",
+  "parseDiagnostics": [],
+  "typecheckDiagnostics": [],
+  "lowerOk": true,
+  "lowerDiagnostics": [],
+  "irSummary": {
+    "functionCount": 1,
+    "instructionKindCounts": {
+      "const": 1
+    }
+  },
+  "cCompiles": true,
+  "cRuntimeExitCode": 30,
+  "wasmAccepted": true,
+  "wasmRuntimeResult": "30"
+}

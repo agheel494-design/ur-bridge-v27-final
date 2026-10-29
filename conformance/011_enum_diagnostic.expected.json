@@ -1,0 +1,15 @@
+{
+  "name": "011_enum_diagnostic",
+  "parseDiagnostics": [
+    {
+      "code": "PE009",
+      "message": "enum declarations are not supported in UR 1.0. This feature is planned for a future version.",
+      "span": {
+        "startLine": 1,
+        "startColumn": 1,
+        "endLine": 1,
+        "endColumn": 4
+      }
+    }
+  ]
+}

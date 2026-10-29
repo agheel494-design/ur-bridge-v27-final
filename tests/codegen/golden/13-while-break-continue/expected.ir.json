@@ -1,0 +1,528 @@
+{
+  "moduleName": "13-while-break-continue",
+  "functions": [
+    {
+      "qualifiedName": "ur_13_while_break_continue_main",
+      "sourceName": "main",
+      "params": [],
+      "returnType": "i64",
+      "blocks": [
+        {
+          "id": 0,
+          "label": "entry",
+          "instructions": [
+            {
+              "kind": "const",
+              "id": 0,
+              "type": "i64",
+              "value": {
+                "kind": "const_int",
+                "value": "0n"
+              },
+              "location": {
+                "file": "program.ur",
+                "start": {
+                  "line": 2,
+                  "column": 11
+                },
+                "end": {
+                  "line": 2,
+                  "column": 11
+                }
+              }
+            },
+            {
+              "kind": "store",
+              "slot": 0,
+              "value": {
+                "id": 0
+              },
+              "location": {
+                "file": "program.ur",
+                "start": {
+                  "line": 3,
+                  "column": 3
+                },
+                "end": {
+                  "line": 8,
+                  "column": 5
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "kind": "branch",
+            "target": 1,
+            "location": {
+              "file": "program.ur",
+              "start": {
+                "line": 3,
+                "column": 3
+              },
+              "end": {
+                "line": 8,
+                "column": 5
+              }
+            }
+          }
+        },
+        {
+          "id": 1,
+          "label": "loop_header",
+          "instructions": [
+            {
+              "kind": "load",
+              "id": 1,
+              "type": "i64",
+              "slot": 0,
+              "location": {
+                "file": "program.ur",
+                "start": {
+                  "line": 3,
+                  "column": 9
+                },
+                "end": {
+                  "line": 3,
+                  "column": 9
+                }
+              }
+            },
+            {
+              "kind": "const",
+              "id": 2,
+              "type": "i64",
+              "value": {
+                "kind": "const_int",
+                "value": "100n"
+              },
+              "location": {
+                "file": "program.ur",
+                "start": {
+                  "line": 3,
+                  "column": 13
+                },
+                "end": {
+                  "line": 3,
+                  "column": 15
+                }
+              }
+            },
+            {
+              "kind": "binop",
+              "id": 3,
+              "type": "bool",
+              "op": "lt",
+              "left": {
+                "id": 1
+              },
+              "right": {
+                "id": 2
+              },
+              "location": {
+                "file": "program.ur",
+                "start": {
+                  "line": 3,
+                  "column": 9
+                },
+                "end": {
+                  "line": 3,
+                  "column": 15
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "kind": "cond_branch",
+            "condition": {
+              "id": 3
+            },
+            "thenTarget": 2,
+            "elseTarget": 3,
+            "location": {
+              "file": "program.ur",
+              "start": {
+                "line": 3,
+                "column": 3
+              },
+              "end": {
+                "line": 8,
+                "column": 5
+              }
+            }
+          }
+        },
+        {
+          "id": 2,
+          "label": "loop_body",
+          "instructions": [
+            {
+              "kind": "load",
+              "id": 4,
+              "type": "i64",
+              "slot": 0,
+              "location": {
+                "file": "program.ur",
+                "start": {
+                  "line": 4,
+                  "column": 8
+                },
+                "end": {
+                  "line": 4,
+                  "column": 8
+                }
+              }
+            },
+            {
+              "kind": "const",
+              "id": 5,
+              "type": "i64",
+              "value": {
+                "kind": "const_int",
+                "value": "7n"
+              },
+              "location": {
+                "file": "program.ur",
+                "start": {
+                  "line": 4,
+                  "column": 13
+                },
+                "end": {
+                  "line": 4,
+                  "column": 13
+                }
+              }
+            },
+            {
+              "kind": "binop",
+              "id": 6,
+              "type": "bool",
+              "op": "eq",
+              "left": {
+                "id": 4
+              },
+              "right": {
+                "id": 5
+              },
+              "location": {
+                "file": "program.ur",
+                "start": {
+                  "line": 4,
+                  "column": 8
+                },
+                "end": {
+                  "line": 4,
+                  "column": 13
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "kind": "cond_branch",
+            "condition": {
+              "id": 6
+            },
+            "thenTarget": 4,
+            "elseTarget": 5,
+            "location": {
+              "file": "program.ur",
+              "start": {
+                "line": 4,
+                "column": 5
+              },
+              "end": {
+                "line": 6,
+                "column": 7
+              }
+            }
+          }
+        },
+        {
+          "id": 4,
+          "label": "then",
+          "instructions": [],
+          "terminator": {
+            "kind": "branch",
+            "target": 3,
+            "location": {
+              "file": "program.ur",
+              "start": {
+                "line": 5,
+                "column": 7
+              },
+              "end": {
+                "line": 5,
+                "column": 11
+              }
+            }
+          }
+        },
+        {
+          "id": 5,
+          "label": "else",
+          "instructions": [],
+          "terminator": {
+            "kind": "branch",
+            "target": 6,
+            "location": {
+              "file": "program.ur",
+              "start": {
+                "line": 4,
+                "column": 5
+              },
+              "end": {
+                "line": 6,
+                "column": 7
+              }
+            }
+          }
+        },
+        {
+          "id": 6,
+          "label": "merge",
+          "instructions": [
+            {
+              "kind": "load",
+              "id": 7,
+              "type": "i64",
+              "slot": 0,
+              "location": {
+                "file": "program.ur",
+                "start": {
+                  "line": 7,
+                  "column": 9
+                },
+                "end": {
+                  "line": 7,
+                  "column": 9
+                }
+              }
+            },
+            {
+              "kind": "const",
+              "id": 8,
+              "type": "i64",
+              "value": {
+                "kind": "const_int",
+                "value": "1n"
+              },
+              "location": {
+                "file": "program.ur",
+                "start": {
+                  "line": 7,
+                  "column": 13
+                },
+                "end": {
+                  "line": 7,
+                  "column": 13
+                }
+              }
+            },
+            {
+              "kind": "binop",
+              "id": 9,
+              "type": "i64",
+              "op": "add",
+              "left": {
+                "id": 7
+              },
+              "right": {
+                "id": 8
+              },
+              "location": {
+                "file": "program.ur",
+                "start": {
+                  "line": 7,
+                  "column": 9
+                },
+                "end": {
+                  "line": 7,
+                  "column": 13
+                }
+              }
+            },
+            {
+              "kind": "store",
+              "slot": 0,
+              "value": {
+                "id": 9
+              },
+              "location": {
+                "file": "program.ur",
+                "start": {
+                  "line": 7,
+                  "column": 5
+                },
+                "end": {
+                  "line": 7,
+                  "column": 13
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "kind": "branch",
+            "target": 1,
+            "location": {
+              "file": "program.ur",
+              "start": {
+                "line": 3,
+                "column": 3
+              },
+              "end": {
+                "line": 8,
+                "column": 5
+              }
+            }
+          }
+        },
+        {
+          "id": 3,
+          "label": "loop_exit",
+          "instructions": [
+            {
+              "kind": "load",
+              "id": 10,
+              "type": "i64",
+              "slot": 0,
+              "location": {
+                "file": "program.ur",
+                "start": {
+                  "line": 9,
+                  "column": 10
+                },
+                "end": {
+                  "line": 9,
+                  "column": 10
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "kind": "return",
+            "value": {
+              "id": 10
+            },
+            "location": {
+              "file": "program.ur",
+              "start": {
+                "line": 9,
+                "column": 3
+              },
+              "end": {
+                "line": 9,
+                "column": 10
+              }
+            }
+          }
+        }
+      ],
+      "entryBlock": 0,
+      "location": {
+        "file": "program.ur",
+        "start": {
+          "line": 1,
+          "column": 1
+        },
+        "end": {
+          "line": 10,
+          "column": 3
+        }
+      },
+      "locals": [
+        {
+          "id": 0,
+          "name": "i",
+          "type": "i64"
+        }
+      ]
+    }
+  ],
+  "externs": [
+    {
+      "name": "ur_runtime_init",
+      "returnType": "void",
+      "parameterTypes": [
+        "i64"
+      ],
+      "callingConvention": "c",
+      "kind": "runtime",
+      "lifecycleRole": "init"
+    },
+    {
+      "name": "ur_runtime_shutdown",
+      "returnType": "void",
+      "parameterTypes": [],
+      "callingConvention": "c",
+      "kind": "runtime",
+      "lifecycleRole": "shutdown"
+    },
+    {
+      "name": "ur_print_int",
+      "returnType": "void",
+      "parameterTypes": [
+        "i64"
+      ],
+      "callingConvention": "c",
+      "kind": "runtime",
+      "lifecycleRole": "none"
+    },
+    {
+      "name": "ur_print_float",
+      "returnType": "void",
+      "parameterTypes": [
+        "f64"
+      ],
+      "callingConvention": "c",
+      "kind": "runtime",
+      "lifecycleRole": "none"
+    },
+    {
+      "name": "ur_print_bool",
+      "returnType": "void",
+      "parameterTypes": [
+        "bool"
+      ],
+      "callingConvention": "c",
+      "kind": "runtime",
+      "lifecycleRole": "none"
+    },
+    {
+      "name": "ur_print_string",
+      "returnType": "void",
+      "parameterTypes": [
+        "string"
+      ],
+      "callingConvention": "c",
+      "kind": "runtime",
+      "lifecycleRole": "none"
+    },
+    {
+      "name": "ur_input_string",
+      "returnType": "string",
+      "parameterTypes": [],
+      "callingConvention": "c",
+      "kind": "runtime",
+      "lifecycleRole": "none"
+    },
+    {
+      "name": "ur_free",
+      "returnType": "void",
+      "parameterTypes": [
+        "string"
+      ],
+      "callingConvention": "c",
+      "kind": "runtime",
+      "lifecycleRole": "none"
+    },
+    {
+      "name": "ur_panic",
+      "returnType": "void",
+      "parameterTypes": [
+        "string"
+      ],
+      "callingConvention": "c",
+      "kind": "runtime",
+      "lifecycleRole": "none"
+    }
+  ]
+}

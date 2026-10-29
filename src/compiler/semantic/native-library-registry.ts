@@ -1,0 +1,303 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// UR-Bridge — Native Library Registry
+// Stage 3.1 — Member-Call Support for Registered Native Libraries
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// Maps a UR `import <name>` to a real, installed native shared library and
+// its registered, type-checked callable functions. This is the ONLY source
+// of truth Lowering consults when resolving `name.method(...)` — per
+// explicit directive, member-call support is NOT general; it works
+// exclusively for identifiers matching an entry in this registry.
+//
+// Adding a new library/function here does not touch the Lexer, Parser, or
+// language grammar in any way — `import <name>` and `x.y(...)` already
+// parse and type-check successfully (confirmed directly: both produce zero
+// diagnostics through Semantic; only Lowering previously rejected the
+// member-call shape). This registry only affects what Lowering does with
+// an already-valid AST shape.
+//
+// Each function entry's `paramTypes`/`returnType` are real IRTypes — the
+// exact types the C Backend's `cType()` already knows how to emit
+// (`emit-c.ts`), so no new type-mapping logic is needed there.
+
+import type { IRType } from "../../shared/ir.js";
+import { fileURLToPath } from "node:url";
+
+export type NativeFunctionSignature = {
+  /** The real, exact C symbol name (as declared in the library's own header/exports) — dlsym'd/linked exactly as given, no mangling applied. */
+  readonly symbol: string;
+  readonly paramTypes: readonly IRType[];
+  readonly returnType: IRType;
+  /**
+   * The REAL, exact C return type of the native symbol (e.g. "int",
+   * "double", "float", "const char*") — used to declare the extern
+   * prototype correctly, matching the library's own actual ABI. When this
+   * differs from what `returnType`'s own `cType()` mapping would produce
+   * (e.g. UR's `i64`/int64_t for a C function that actually returns a
+   * 32-bit `int`), the C Backend generates a thin, explicitly-casting
+   * wrapper function instead of declaring a mismatched prototype directly
+   * — this is the Stage 3.2 fix for the Stage 3.1 `isComplete` int-return
+   * narrowing risk (previously relied on this platform's own calling
+   * convention zero-extending 32-bit returns; not defined behavior per
+   * the C standard, and not safe for functions that can return negative
+   * values). Required field (not optional) so every future registry
+   * entry is forced to state the real C type explicitly, rather than
+   * silently assuming it matches UR's own internal representation.
+   */
+  readonly cReturnType: string;
+  /** The REAL, exact C parameter types, in order — same reasoning as cReturnType. */
+  readonly cParamTypes: readonly string[];
+  /**
+   * Stage 3.3 — output-parameter support (e.g. `sqlite3_open`'s own
+   * `sqlite3** ppDb`). When set, the REAL C function has ONE MORE
+   * parameter than `paramTypes`/`cParamTypes` describe — the out-pointer
+   * at `realParamIndex`, which is NOT part of UR's own visible signature
+   * at all (a UR program calls `sqlite3.open(filename)` with ONE
+   * argument, not two). The wrapper declares a local variable of
+   * `pointeeCType` (e.g. "sqlite3*"), passes its address at
+   * `realParamIndex`, calls the real function (its own C return value is
+   * discarded — matching common high-level FFI wrapper convention: the
+   * caller gets the HANDLE, not the raw status code), and returns that
+   * local variable's final value, cast to UR's `returnType` (always
+   * `i64` in practice — UR has no pointer type; the handle is
+   * represented as an opaque 64-bit integer, exactly matching how this
+   * project's own `src/ffi/runtime/memory.ts` and driver classes already
+   * represent every native handle).
+   */
+  readonly outParam?: {
+    /** Index in the REAL C parameter list (not UR's own paramTypes) where the out-pointer argument goes. */
+    readonly realParamIndex: number;
+    /** The C type the out-pointer POINTS TO (the wrapper's local variable is declared with this type, then its address is passed) — e.g. "sqlite3*" for a `sqlite3**` parameter. */
+    readonly pointeeCType: string;
+  };
+};
+
+export type NativeLibraryEntry = {
+  /** Absolute path to an external shared library to pass to the linker.
+   * Omitted when the platform C runtime already provides the registered symbols
+   * and no separate library input is required (e.g. MinGW's CRT on Windows). */
+  readonly libraryPath?: string;
+  readonly functions: Readonly<Record<string, NativeFunctionSignature>>;
+};
+
+// ── Registry ─────────────────────────────────────────────────────────────
+//
+// Stage 3.1 scope: exactly one function (`libversion`) on exactly one
+// library (`sqlite3`), taking zero arguments and returning a `string` —
+// deliberately the smallest possible real, working slice (no pointers, no
+// output parameters, no structs — those are later, separate stages per
+// the explicit sequencing: 3.2 → 3.3 → 3.4 → ...).
+//
+// The library path was confirmed to exist directly in this environment
+// (`ls -la /usr/lib/x86_64-linux-gnu/libsqlite3.so.0`) before being hardcoded
+// here — not assumed. A real production registry would resolve this via
+// the existing NativeFfiLoader/DriverRegistry machinery
+// (src/ffi/native/*) rather than a hardcoded path; this Stage's own scope
+// is proving the Lowering/Codegen mechanism works end-to-end with the
+// smallest possible real case, not building the general discovery system.
+
+export const NATIVE_LIBRARY_REGISTRY: Readonly<Record<string, NativeLibraryEntry>> = {
+  sqlite3: {
+    libraryPath: process.platform === "win32"
+      ? fileURLToPath(new URL("../../../tests/fixtures/sqlite/sqlite3.dll", import.meta.url))
+      : "/usr/lib/x86_64-linux-gnu/libsqlite3.so.0",
+    functions: {
+      libversion: {
+        symbol: "sqlite3_libversion",
+        paramTypes: [],
+        returnType: "string",
+        cReturnType: "const char*",
+        cParamTypes: [],
+      },
+      // Stage 3.2 FIX (was a known, documented limitation in Stage 3.1):
+      // the real C symbol returns `int` (32-bit) — cReturnType now states
+      // this exactly, so the C Backend declares the extern with the
+      // CORRECT, real prototype and generates an explicitly-casting
+      // wrapper for the widen-to-i64 step, rather than declaring a
+      // mismatched prototype and relying on this platform's own calling
+      // convention (undefined behavior per the C standard, confirmed
+      // fixed properly — not by continuing to rely on platform luck).
+      isComplete: {
+        symbol: "sqlite3_complete",
+        paramTypes: ["string"],
+        returnType: "i64",
+        cReturnType: "int",
+        cParamTypes: ["const char*"],
+      },
+      // Genuine, separate int32-narrowing case (zero arguments) — verified
+      // directly: returns 3045001 (matching version 3.45.1), confirming
+      // the wrapper's cast handles a large positive 32-bit value correctly
+      // too, not only the small 0/1 values isComplete happens to use.
+      libversionNumber: {
+        symbol: "sqlite3_libversion_number",
+        paramTypes: [],
+        returnType: "i64",
+        cReturnType: "int",
+        cParamTypes: [],
+      },
+      // Genuine `bool` return type coverage — the real C function returns
+      // `int` (0 or 1 by its own documented contract), mapped directly to
+      // UR's `bool` (not `i64`) — a different narrowing shape than the
+      // int32->i64 cases above (int -> bool, not int -> int64).
+      threadsafe: {
+        symbol: "sqlite3_threadsafe",
+        paramTypes: [],
+        returnType: "bool",
+        cReturnType: "int",
+        cParamTypes: [],
+      },
+      // Genuine FULL-WIDTH i64 case — no narrowing needed at all, since
+      // the real C function already returns `sqlite3_int64` (a true
+      // 64-bit integer, aliasing `long long` / `int64_t` exactly). Added
+      // specifically to prove the wrapper mechanism is a correct NO-OP
+      // (no unnecessary cast/precision loss) when the real type already
+      // matches UR's own internal width.
+      memoryUsed: {
+        symbol: "sqlite3_memory_used",
+        paramTypes: [],
+        returnType: "i64",
+        cReturnType: "int64_t",
+        cParamTypes: [],
+      },
+      // Stage 3.3 — output parameter. Verified directly this round:
+      // `sqlite3_open(":memory:", &db)` returns rc=0 and a valid handle;
+      // `sqlite3_close(db)` on that handle returns rc=0. UR's own visible
+      // signature is `open(filename: string): i64` (ONE argument) — the
+      // real C function's second parameter (`sqlite3** ppDb`) is entirely
+      // hidden, handled by the generated wrapper (see emit-c.ts's
+      // emitFfiWrapper). The wrapper returns the HANDLE (cast to i64),
+      // not sqlite3_open's own raw status code — matching this registry's
+      // own stated convention for output-parameter functions.
+      open: {
+        symbol: "sqlite3_open",
+        paramTypes: ["string"],
+        returnType: "i64",
+        cReturnType: "int", // the real function's own C return type (its own rc, discarded by the wrapper — the wrapper's OWN return type is governed by pointeeCType below, not this field, for outParam functions)
+        cParamTypes: ["const char*"],
+        outParam: { realParamIndex: 1, pointeeCType: "sqlite3*" },
+      },
+      // Stage 3.3 — ordinary POINTER argument (not an out-param): UR
+      // passes the i64 handle `open()` returned; the wrapper casts it
+      // back to the real `sqlite3*` type before calling. Verified
+      // directly: closing the handle `open` produced returns rc=0.
+      close: {
+        symbol: "sqlite3_close",
+        paramTypes: ["i64"],
+        returnType: "i64",
+        cReturnType: "int",
+        cParamTypes: ["sqlite3*"],
+      },
+    },
+  },
+  // Stage 3.2 — genuine float/double coverage via the C standard math
+  // library (verified directly: sqrt(16.0) == 4.0). UR's own `float` type
+  // already maps 1:1 to C `double` (see docs/USING_UR_BRIDGE_TODAY.md /
+  // UR_LANGUAGE_SPEC_1_0.md §6.1) — this is a genuine, EXACT-WIDTH match,
+  // not a narrowing case, added specifically to prove the wrapper
+  // mechanism correctly handles float-family types too, not only integers.
+  libm: {
+    // MinGW supplies the C math functions without a separate Linux libm.so input.
+    libraryPath: process.platform === "win32" ? undefined : "/usr/lib/x86_64-linux-gnu/libm.so.6",
+    functions: {
+      sqrt: {
+        symbol: "sqrt",
+        paramTypes: ["f64"],
+        returnType: "f64",
+        cReturnType: "double",
+        cParamTypes: ["double"],
+      },
+    },
+  },
+  // Stage 4.1 — libc entries, verified directly via the harness before
+  // registration: abs(-42) == 42; strlen("hello world") == 11.
+  libc: {
+    // abs/strlen are supplied by the platform C runtime. On Windows, MinGW
+    // links its CRT by default; never pass a Linux libc.so.6 path to its linker.
+    libraryPath: process.platform === "win32" ? undefined : "/usr/lib/x86_64-linux-gnu/libc.so.6",
+    functions: {
+      abs: {
+        symbol: "abs",
+        paramTypes: ["i64"],
+        returnType: "i64",
+        cReturnType: "int",
+        cParamTypes: ["int"],
+      },
+      strlen: {
+        symbol: "strlen",
+        paramTypes: ["string"],
+        returnType: "i64",
+        // size_t is the standard return type and matches <string.h> on both
+        // LP64 Linux and LLP64 Windows; unsigned long is not portable here.
+        cReturnType: "size_t",
+        cParamTypes: ["const char*"],
+      },
+    },
+  },
+  // Stage 4.1 — full C type spectrum coverage, proven against a real,
+  // purpose-built shared library (tests/fixtures/ffi-type-coverage/) since
+  // no convenient real-world system library happens to expose every narrow
+  // integer width (int8/16/32, uint8/16/32/64) as a simple, directly
+  // callable function. Every function here is `x -> x+1` (or `!x` for
+  // bool, or identity for pointers) — real, compiled, callable code, not
+  // a mock; only the FUNCTION BEHAVIOR is deliberately trivial, so the
+  // test's own assertions are about the WRAPPER'S correctness (does the
+  // right value cross the FFI boundary with the right width/sign), not
+  // about exercising a real library's own business logic.
+  typecov: {
+    libraryPath: process.platform === "win32" ? fileURLToPath(new URL("../../../tests/fixtures/ffi-type-coverage/libtypecov.dll", import.meta.url)) : fileURLToPath(new URL("../../../tests/fixtures/ffi-type-coverage/libtypecov.so", import.meta.url)),
+    functions: {
+      testI8:      { symbol: "ur_test_i8",      paramTypes: ["i64"], returnType: "i64", cReturnType: "int8_t",   cParamTypes: ["int8_t"] },
+      testI16:     { symbol: "ur_test_i16",     paramTypes: ["i64"], returnType: "i64", cReturnType: "int16_t",  cParamTypes: ["int16_t"] },
+      testI32:     { symbol: "ur_test_i32",     paramTypes: ["i64"], returnType: "i64", cReturnType: "int32_t",  cParamTypes: ["int32_t"] },
+      testI64:     { symbol: "ur_test_i64",     paramTypes: ["i64"], returnType: "i64", cReturnType: "int64_t",  cParamTypes: ["int64_t"] },
+      testU8:      { symbol: "ur_test_u8",      paramTypes: ["i64"], returnType: "i64", cReturnType: "uint8_t",  cParamTypes: ["uint8_t"] },
+      testU16:     { symbol: "ur_test_u16",     paramTypes: ["i64"], returnType: "i64", cReturnType: "uint16_t", cParamTypes: ["uint16_t"] },
+      testU32:     { symbol: "ur_test_u32",     paramTypes: ["i64"], returnType: "i64", cReturnType: "uint32_t", cParamTypes: ["uint32_t"] },
+      testU64:     { symbol: "ur_test_u64",     paramTypes: ["i64"], returnType: "i64", cReturnType: "uint64_t", cParamTypes: ["uint64_t"] },
+      testFloat:   { symbol: "ur_test_float",   paramTypes: ["f64"], returnType: "f64", cReturnType: "float",    cParamTypes: ["float"] },
+      testDouble:  { symbol: "ur_test_double",  paramTypes: ["f64"], returnType: "f64", cReturnType: "double",   cParamTypes: ["double"] },
+      testBool:    { symbol: "ur_test_bool",    paramTypes: ["bool"], returnType: "bool", cReturnType: "bool",   cParamTypes: ["bool"] },
+      testCharPtr: { symbol: "ur_test_charptr", paramTypes: ["string"], returnType: "string", cReturnType: "const char*", cParamTypes: ["const char*"] },
+      testVoidPtr: { symbol: "ur_test_voidptr", paramTypes: ["i64"], returnType: "i64", cReturnType: "void*",    cParamTypes: ["void*"] },
+    },
+  },
+  // Stage 4.2 — generic pointer read/write/arithmetic, proven against a
+  // real, purpose-built shared library (tests/fixtures/ffi-type-coverage/
+  // libmem.so). This is UR's own "pointer to any type" capability:
+  // UR itself has no pointer type at the language level (unchanged,
+  // per the standing constraint) — every handle remains an opaque i64 —
+  // but a UR program can now allocate, read, write, and offset through
+  // one via these registered native calls.
+  mem: {
+    libraryPath: process.platform === "win32" ? fileURLToPath(new URL("../../../tests/fixtures/ffi-type-coverage/libmem.dll", import.meta.url)) : fileURLToPath(new URL("../../../tests/fixtures/ffi-type-coverage/libmem.so", import.meta.url)),
+    functions: {
+      alloc:    { symbol: "ur_mem_alloc",     paramTypes: ["i64"], returnType: "i64", cReturnType: "void*", cParamTypes: ["int64_t"] },
+      free:     { symbol: "ur_mem_free",      paramTypes: ["i64"], returnType: "void", cReturnType: "void", cParamTypes: ["void*"] },
+      offset:   { symbol: "ur_mem_offset",    paramTypes: ["i64", "i64"], returnType: "i64", cReturnType: "void*", cParamTypes: ["void*", "int64_t"] },
+      readI32:  { symbol: "ur_mem_read_i32",  paramTypes: ["i64"], returnType: "i64", cReturnType: "int32_t", cParamTypes: ["void*"] },
+      writeI32: { symbol: "ur_mem_write_i32", paramTypes: ["i64", "i64"], returnType: "void", cReturnType: "void", cParamTypes: ["void*", "int32_t"] },
+      readI64:  { symbol: "ur_mem_read_i64",  paramTypes: ["i64"], returnType: "i64", cReturnType: "int64_t", cParamTypes: ["void*"] },
+      writeI64: { symbol: "ur_mem_write_i64", paramTypes: ["i64", "i64"], returnType: "void", cReturnType: "void", cParamTypes: ["void*", "int64_t"] },
+      readF64:  { symbol: "ur_mem_read_f64",  paramTypes: ["i64"], returnType: "f64", cReturnType: "double", cParamTypes: ["void*"] },
+      writeF64: { symbol: "ur_mem_write_f64", paramTypes: ["i64", "f64"], returnType: "void", cReturnType: "void", cParamTypes: ["void*", "double"] },
+      readU8:   { symbol: "ur_mem_read_u8",   paramTypes: ["i64"], returnType: "i64", cReturnType: "uint8_t", cParamTypes: ["void*"] },
+      writeU8:  { symbol: "ur_mem_write_u8",  paramTypes: ["i64", "i64"], returnType: "void", cReturnType: "void", cParamTypes: ["void*", "uint8_t"] },
+      readPtr:  { symbol: "ur_mem_read_ptr",  paramTypes: ["i64"], returnType: "i64", cReturnType: "void*", cParamTypes: ["void*"] },
+      writePtr: { symbol: "ur_mem_write_ptr", paramTypes: ["i64", "i64"], returnType: "void", cReturnType: "void", cParamTypes: ["void*", "void*"] },
+      // Safety layer (added per explicit review request): 0=OK,
+      // 1=out-of-bounds, 2=use-after-free, 3=unknown/untracked pointer,
+      // 4=double-free. Checked after any mem.* call to detect a
+      // violation the underlying C library caught rather than let
+      // silently corrupt memory or crash the process.
+      lastError: { symbol: "ur_mem_last_error", paramTypes: [], returnType: "i64", cReturnType: "int32_t", cParamTypes: [] },
+    },
+  },
+};
+
+export function lookupNativeLibrary(importName: string): NativeLibraryEntry | undefined {
+  return NATIVE_LIBRARY_REGISTRY[importName];
+}
+
+export function lookupNativeFunction(importName: string, methodName: string): NativeFunctionSignature | undefined {
+  return NATIVE_LIBRARY_REGISTRY[importName]?.functions[methodName];
+}

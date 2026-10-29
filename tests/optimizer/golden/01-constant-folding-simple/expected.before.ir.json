@@ -1,0 +1,107 @@
+{
+  "qualifiedName": "ur_01_constant_folding_simple_main",
+  "sourceName": "main",
+  "params": [],
+  "returnType": "i64",
+  "blocks": [
+    {
+      "id": 0,
+      "label": "entry",
+      "instructions": [
+        {
+          "kind": "const",
+          "id": 0,
+          "type": "i64",
+          "value": {
+            "kind": "const_int",
+            "value": "2n"
+          },
+          "location": {
+            "file": "program.ur",
+            "start": {
+              "line": 2,
+              "column": 10
+            },
+            "end": {
+              "line": 2,
+              "column": 10
+            }
+          }
+        },
+        {
+          "kind": "const",
+          "id": 1,
+          "type": "i64",
+          "value": {
+            "kind": "const_int",
+            "value": "3n"
+          },
+          "location": {
+            "file": "program.ur",
+            "start": {
+              "line": 2,
+              "column": 14
+            },
+            "end": {
+              "line": 2,
+              "column": 14
+            }
+          }
+        },
+        {
+          "kind": "binop",
+          "id": 2,
+          "type": "i64",
+          "op": "add",
+          "left": {
+            "id": 0
+          },
+          "right": {
+            "id": 1
+          },
+          "location": {
+            "file": "program.ur",
+            "start": {
+              "line": 2,
+              "column": 10
+            },
+            "end": {
+              "line": 2,
+              "column": 14
+            }
+          }
+        }
+      ],
+      "terminator": {
+        "kind": "return",
+        "value": {
+          "id": 2
+        },
+        "location": {
+          "file": "program.ur",
+          "start": {
+            "line": 2,
+            "column": 3
+          },
+          "end": {
+            "line": 2,
+            "column": 14
+          }
+        }
+      }
+    }
+  ],
+  "entryBlock": 0,
+  "location": {
+    "file": "program.ur",
+    "start": {
+      "line": 1,
+      "column": 1
+    },
+    "end": {
+      "line": 3,
+      "column": 3
+    }
+  },
+  "locals": []
+}

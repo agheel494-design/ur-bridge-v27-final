@@ -1,0 +1,23 @@
+{
+  "name": "019_forin_mutation_during_iteration",
+  "parseDiagnostics": [],
+  "typecheckDiagnostics": [],
+  "lowerOk": true,
+  "lowerDiagnostics": [],
+  "irSummary": {
+    "functionCount": 1,
+    "instructionKindCounts": {
+      "const": 11,
+      "array_store": 4,
+      "store": 2,
+      "array_length": 1,
+      "load": 3,
+      "binop": 2,
+      "array_load": 2
+    }
+  },
+  "cCompiles": true,
+  "cRuntimeExitCode": 100,
+  "wasmAccepted": false,
+  "wasmRejectionMessage": "[WASM1002] unsupported CFG shape (found 5 blocks) — only single-block, 3-block Diamond (Invariant 3.1A.4), 4-block Diamond+Merge (Invariant 3.1A.5), or a valid nested-if structure are supported yet"
+}

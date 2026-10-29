@@ -1,0 +1,607 @@
+﻿**********************
+Windows PowerShell transcript start
+Start time: 20261024223004
+Username: عقيل\عقيل
+RunAs User: عقيل\عقيل
+Configuration Name: 
+Machine: عقيل (Microsoft Windows NT 10.0.19045.0)
+Host Application: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe
+Process ID: 12412
+PSVersion: 5.1.19041.7802
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.19041.7802
+BuildVersion: 10.0.19041.7802
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+
+=== 1. C BACKEND: ARRAY SLOT DECLARATION ===
+  // every block unconditionally produced a real, legitimate gcc
+  // -Wunused-label warning the moment a function had a branch point with
+  // no loop-back â€” found via the first real if/else E2E test (Phase 2.6.2).
+  const targetedBlockIds = new Set<number>();
+  for (const block of fn.blocks) {
+    if (block.terminator.kind === "branch") targetedBlockIds.add(block.terminator.target);
+    else if (block.terminator.kind === "cond_branch") {
+      targetedBlockIds.add(block.terminator.thenTarget);
+      targetedBlockIds.add(block.terminator.elseTarget);
+    }
+  }
+
+  // Gate A9.3 â€” Production Shadow Stack Integration: compute, per
+  // function, the SAME root set Gates A4-A5.1's own experimental
+  // codegen already proved mechanically derivable from real IR
+  // metadata â€” every array-typed local/parameter/result slot, plus
+  // every struct-typed local's own array_ref field. This is an
+  // ADDITIVE, PARALLEL tracking layer: existing named C variables
+  // (slot_x) remain the sole source of truth for every read/write
+  // exactly as before (array_load/array_store/field_load/field_store/
+  // call-argument resolution are UNCHANGED) â€” the shadow stack is
+  // updated alongside them at every point an array-typed value is
+  // established, so real, precise roots exist in production without
+  // touching the already-proven value-resolution logic at all.
+  const arraySlotShadowIndex = new Map<number, number>();
+  const structFieldShadowIndex = new Map<string, number>();
+  let __nextShadowIndex = 0;
+  for (const slot of fn.locals) {
+    if (slot.isArray || slot.isArrayParam || slot.isArrayResult) {
+      arraySlotShadowIndex.set(slot.id, __nextShadowIndex++);
+    }
+    if (slot.structLayout) {
+      slot.structLayout.fields.forEach((field, fi) => {
+        if (field.type === "array_ref") structFieldShadowIndex.set(`${slot.id}:${fi}`, __nextShadowIndex++);
+      });
+    }
+  }
+  const totalShadowRoots = __nextShadowIndex;
+  const emitSetRoot = (idx: number, valueExpr: string) => `  ur_gc_set_root(__ur_shadow_base + ${idx}, (int64_t*)${valueExpr});`;
+
+  const lines: string[] = [`${signature} {`];
+  // Gate A9.3: reserve every root slot for this function's own frame
+  // BEFORE any array-typed value is established, so every subsequent
+  // ur_gc_set_root() call below has a valid slot to write into.
+  if (totalShadowRoots > 0) lines.push(`  int64_t __ur_shadow_base = ur_gc_push_frame(${totalShadowRoots});`);
+  // Compiler & Runtime Stabilization phase â€” id->type map, built once
+  // per function by scanning every value-producing instruction, so
+  // emitInstruction's own binop case can special-case STRING comparison
+  // (== != < <= > >=) as a real strcmp() call rather than raw C pointer
+  // comparison. See emitInstruction's own comment on this exact bug
+  // (confirmed directly: "abc" == "abc" only happened to print `true`
+  // because gcc pools identical string literals to the same address at
+  // -O0 â€” the generated C was `v0 == v1` on two `const char*`, an
+  // undefined-by-content pointer comparison, not string equality).
+  const idTypes = new Map<number, IRType>();
+  for (const block of fn.blocks) {
+    for (const inst of block.instructions) {
+      if ("id" in inst) idTypes.set(inst.id, inst.type);
+    }
+  }
+  // v29-D4 (Gap A, Nested Literal Construction): the set of local array
+  // slots that are ever STORED as an element of another array (i.e.
+  // ever appear as an array_store's own value.arraySlot within this
+  // function) â€” these need a real header (per the ratified Nested
+  // Array Reference Representation Contract's own C-specific decision:
+  // an INNER array carries its own 8-byte length prefix, since C's
+  // existing depth-1 local convention, D3's own frozen work, has no
+  // header and relies on a compile-time-known length that an outer
+  // array's own dynamically-indexed element cannot provide). This does
+  // NOT change how an ordinary (never-nested) local array is declared â€”
+  // only slots actually used as an inner reference get a header.
+  const innerArraySlotIds = new Set<number>();
+  for (const block of fn.blocks) {
+    for (const inst of block.instructions) {
+      if (inst.kind === "array_store" && inst.value.arraySlot !== undefined) {
+        innerArraySlotIds.add(inst.value.arraySlot);
+      }
+      if (inst.kind === "field_store" && inst.value.arraySlot !== undefined) {
+        innerArraySlotIds.add(inst.value.arraySlot);
+      }
+    }
+    // v29-D6 (Layer A/B): an array RETURNED from this function needs
+    // the identical treatment â€” its own real length must be readable
+    // by the CALLER (who has no compile-time knowledge of it, exactly
+    // the same reasoning that already gives an inner array its own
+    // header). Confirmed directly this round: without this, the
+    // caller's own bounds check fell back to a hardcoded 0 (neither
+    // `length` nor `runtimeLengthCName` exists for the callee's own
+    // array slot from the caller's own perspective), rejecting every
+    // access as out-of-bounds.
+    if (block.terminator.kind === "return" && block.terminator.value.arraySlot !== undefined) {
+      innerArraySlotIds.add(block.terminator.value.arraySlot);
+    }
+  }
+  // Gate A9.3 â€” Production Shadow Stack Integration: root-index maps
+  // are computed once, earlier in this function (before `lines` is
+  // declared) â€” see that computation for the full scope comment.
+  // Local slots (Level 2.6.1): declared once, uninitialized, at the top
+  // of the function â€” every UR `let`/reassignable variable becomes a
+  // real C local here; every subsequent `load`/`store` reads/writes it
+  // directly (see IR_SPEC.md / CFG_SPEC.md آ§1 for why this avoids
+  // needing phi nodes at CFG merge points).
+  for (const slot of fn.locals) {
+
+    // use the explicit isArray field, not length > 1 (which incorrectly
+    // treated a genuine one-element array, length === 1, as an ordinary
+    // scalar, causing subsequent array_load/array_store references to
+    // index a non-array C declaration).
+    const isInnerArray = slot.isArray === true && innerArraySlotIds.has(slot.id);
+    // Gate A9.2 â€” Array Allocation Migration & Header Unification: both
+    // the previously-headerless (plain isArray) and previously-headered
+    // (isInnerArray) cases now allocate through the SAME, unified
+    // ur_gc_alloc_array() contract (Gate A9.1's own runtime foundation)
+    // â€” removing the two-shape inconsistency Gate A8 identified. Layer
+    // 1/2 semantics (aliasing, struct-field sharing) are unchanged by
+    // this migration: it changes ONLY how an array's own header/length
+    // is represented internally, never what array_load/array_store/
+    // assignment/struct-copy observably do.
+    const elementKindFor = (s: IRLocalSlot) => (s.type === "array_ref" ? "UR_GC_ELEMENT_ARRAY_REF" : "UR_GC_ELEMENT_SCALAR");
+    const decl = slot.structLayout
+      ? `  struct ${cStructTypeName(slot.structLayout.structName)} ${cSlotName(slot.name)};`
+      : slot.isArrayParam
+      ? `  ${cType(slot.type)}* ${cSlotName(slot.name)};`
+      : slot.isArrayResult
+      ? // v29-D6 (Layer A/B, array-returning call results â€” "Gate 2R
+        // Remediation," a pre-existing, deliberate Lowering mechanism
+        // that was never matched by a corresponding backend fix,
+        // confirmed directly this round): this slot's own real array
+        // comes from a function CALL's own return value, not from a
+        // local allocation this function performs itself â€” mirroring
+        // isArrayParam's own identical reasoning exactly (a value
+        // received from elsewhere, never allocated here). Declared as
+        // a plain, uninitialized pointer; the call instruction's own
+        // emission (below) assigns its own real value.
+        `  ${cType(slot.type)}* ${cSlotName(slot.name)};`
+      : slot.isArray
+      ? // Gate A9.2: unified allocation for EVERY owning array local,
+        // whether or not it is ever used as an inner/field/returned
+        // reference (isInnerArray's own prior distinction no longer
+        // affects ALLOCATION â€” every array now carries the same
+        // header, read uniformly via ur_array_length() everywhere
+        // else in this file, replacing the old *(base - 1) pattern).
+        `  ${cType(slot.type)}* ${cSlotName(slot.name)} = (${cType(slot.type)}*)ur_gc_alloc_array(${slot.length ?? 1}, ${elementKindFor(slot)});`
+      : `  ${cType(slot.type)} ${cSlotName(slot.name)};`;
+    lines.push(decl);
+    // Gate A9.3: mirror this array's own freshly-allocated value into
+    // its own shadow root, immediately, in the same declaration group.
+    if (slot.isArray && !slot.isArrayParam && !slot.isArrayResult && !slot.structLayout) {
+      lines.push(emitSetRoot(arraySlotShadowIndex.get(slot.id)!, cSlotName(slot.name)));
+    }
+    // Gate A9.2: ur_register_array_allocation()'s own double-free-
+    // tracking role is superseded, for slots allocated through the new
+    // unified path, by ur_gc_alloc_array()'s own header/sweep-list
+    // membership â€” confirmed safe to omit entirely: ur_free_array()
+    // itself is never emitted by this backend at all (confirmed
+    // directly, zero call sites), so no existing free-path depended on
+    // this registration for these slots.
+  }
+  // Real fix for CG9001 (per LANGUAGE_SYNTAX_1_1_SPEC.md آ§2.5's own
+  // ratified "Parameter passing: BY VALUE" requirement): a struct
+  // parameter's own real value (already passed by C's own native
+  // by-value struct-copy semantics, via the real `struct Name p_name`
+  // parameter) is copied into the internal working slot used by
+  // field_load/field_store throughout the function body - one real C
+  // struct assignment (`slot_p = p_p;`), which C itself lowers to a
+  // full field-by-field copy automatically. No manual per-field copy
+  // code is needed here.
+  for (const p of fn.params) {
+    if (p.structLayout) {
+      lines.push(`  ${cSlotName(p.name)} = p_${p.name};`);
+      // Gate A9.3: mirror each of this struct parameter's own
+      // array_ref fields into their own shadow roots, now that the
+      // struct-copy assignment above has given them their real values.
+      const paramSlot = fn.locals.find(l => l.name === p.name);
+      if (paramSlot?.structLayout) {
+        paramSlot.structLayout.fields.forEach((field, fi) => {
+          if (field.type !== "array_ref") return;
+          const idx = structFieldShadowIndex.get(`${paramSlot.id}:${fi}`);
+          if (idx !== undefined) lines.push(emitSetRoot(idx, `${cSlotName(p.name)}.${field.name}`));
+        });
+      }
+    }
+    if (p.arrayLength !== undefined) {
+      lines.push(`  ${cSlotName(p.name)} = p_${p.name};`);
+      // Gate A9.3: mirror this array parameter's own value into its
+      // own shadow root.
+      const paramSlot = fn.locals.find(l => l.name === p.name);
+      if (paramSlot) {
+        const idx = arraySlotShadowIndex.get(paramSlot.id);
+        if (idx !== undefined) lines.push(emitSetRoot(idx, cSlotName(p.name)));
+
+=== 2. C BACKEND: ARRAY ALLOCATION HELPERS ===
+  lines.push(`}`);
+  return lines.join("\n");
+}
+
+/** Emits a forward declaration (prototype) for a function, used so call order in C never matters (matches UR's own forward-declaration semantics). */
+function emitPrototype(fn: IRFunction): string {
+  const params = fn.params.flatMap(p => p.structLayout
+    ? [`struct ${cStructTypeName(p.structLayout.structName)}`]
+    : p.arrayLength !== undefined
+    ? [`${cType(p.type)}[]`, `int64_t`]
+    : [cType(p.type)]
+  ).join(", ") || "void";
+  const returnTypeStr = fn.returnStructLayout ? `struct ${cStructTypeName(fn.returnStructLayout.structName)}` : cType(fn.returnType);
+  return `${returnTypeStr} ${fn.qualifiedName}(${params});`;
+}
+
+/**
+ * Emits complete, compilable C99 source for an IRModule.
+ *
+ * The module must have a function named "main" (UR source-level `main`) to
+ * produce a runnable executable â€” its qualified name is wired to C's `main`
+ * entry point via a thin wrapper, since UR's `main` returns `int64_t` (or
+ * void) but C's `main` must return `int`.
+ */
+export function emitC(module: IRModule): string {
+  const lines: string[] = [
+    `// Generated by UR C Backend (Level 2, Phase 2.3/2.4) â€” do not edit by hand.`,
+    `#include <stdint.h>`,
+    `#include <stdbool.h>`,
+    // v29-D3-1 / Gate A9.2: kept for the standard library surface
+    // generated code may still rely on elsewhere (array allocation
+    // itself no longer calls malloc() directly here â€” Gate A9.2's own
+    // migration routes every owning array through ur_gc_alloc_array(),
+    // declared in ur_runtime.h, not through a direct malloc() call in
+    // generated code).
+    `#include <stdlib.h>`,
+    // Compiler & Runtime Stabilization phase â€” needed for strcmp(),
+    // used by binop emission for real string content comparison (==
+    // != < <= > >=) instead of raw C pointer comparison. See
+    // emitInstruction's own "binop" case comment for the full bug
+    // this fixes.
+    `#include <string.h>`,
+    `#include "ur_runtime.h"`,
+    ``,
+    // Runtime ABI Version Contract (RUNTIME_SPEC.md آ§4.4) â€” every generated
+    // file declares the ABI version it was built against; the Runtime's
+    // Init function (discovered below purely by role, never by name)
+    // checks this against its own compiled-in version at program startup.
+    `#define UR_RUNTIME_ABI_REQUIRED 1`,
+    ``,
+  ];
+
+  const nonRuntimeExterns = module.externs.filter(e => e.kind !== "runtime");
+
+  // Stage 3.3 â€” forward-declare every distinct opaque struct type an FFI
+  // extern's real C signature references via a pointer (e.g. `sqlite3*`)
+  // â€” the real library's own header is never #included here (this
+  // project's own FFI model never includes a third-party header), so any
+  // such type must be forward-declared as `typedef struct X X;` (an
+  // OPAQUE handle â€” the real struct's fields are never accessed, only
+  // pointers to it are passed around, so no field layout is needed).
+  // Confirmed directly: without this, gcc fails with "unknown type name"
+  // for the real out-param/pointer-argument cases (sqlite3_open/close).
+  const opaqueStructNames = new Set<string>();
+  const KNOWN_C_PRIMITIVE_POINTER_BASES = new Set(["const char", "char", "void", "int", "double", "float"]);
+  function collectOpaqueBase(cTypeStr: string) {
+    const base = cTypeStr.replace(/\*+$/, "").trim();
+    if (cTypeStr.endsWith("*") && !KNOWN_C_PRIMITIVE_POINTER_BASES.has(base) && /^[A-Za-z_][A-Za-z0-9_]*$/.test(base)) {
+      opaqueStructNames.add(base);
+    }
+  }
+  for (const ext of nonRuntimeExterns) {
+    if (ext.kind !== "ffi") continue;
+    for (const t of ext.cParameterTypes ?? []) collectOpaqueBase(t);
+    if (ext.outParam) collectOpaqueBase(ext.outParam.pointeeCType + "*");
+
+=== 3. WASM BACKEND: ARRAY STORE AND ALLOCATION ===
+          )
+        : new Uint8Array(0);
+      if (inst.baseRef) parts.push(setBaseScratchForStore);
+      const baseLocalIndex = inst.baseRef ? baseRefScratchForStore : arrayBaseLocalIndexBySlotId.get(inst.slot);
+      if (baseLocalIndex === undefined) {
+        // Unreachable given validateScope() already ran â€” defensive only.
+        throw new WasmUnsupportedError({ code: WASM_CODES.UNSUPPORTED_INSTRUCTION, functionName: fn.sourceName, message: `internal error: expected a validated array base local for slot ${inst.slot}` });
+      }
+      const slotMeta = fn.locals.find(l => l.id === inst.slot);
+      // V29-D2 (fix B): a parameter's own array is already allocated by
+      // the caller â€” it must NEVER be bump-allocated or have its
+      // header (re)written here, unlike a literal array's own
+      // first-store allocation. Guarded explicitly by isArrayParam,
+      // not merely by allocatedArraySlots' own tracking (which was
+      // never designed with parameter slots in mind at all).
+      // v29-D5: a baseRef-driven write targets an EXISTING array (the
+      // one baseRef's own expression already resolved to) â€” it must
+      // NEVER be bump-allocated or have its header rewritten either,
+      // for the identical reason as an array parameter. Confirmed
+      // necessary directly: without this guard, `b.values[1] = 99`
+      // would have re-allocated and overwritten the header of an
+      // already-live array, corrupting it.
+      if (slotMeta?.isArrayParam !== true && !inst.baseRef) {
+        const elementCount = slotMeta?.length ?? 1;
+        if (!allocatedArraySlots.has(inst.slot)) {
+          allocatedArraySlots.add(inst.slot);
+          parts.push(encodeArrayAllocation(bumpGlobalIndex, baseLocalIndex, elementCount));
+          const arrayBaseExprForHeader = concatBytes(new Uint8Array([OPCODE_LOCAL_GET]), encodeULEB128(baseLocalIndex));
+          parts.push(encodeArrayHeaderStore(arrayBaseExprForHeader, elementCount));
+        }
+      }
+      const arrayBaseExpr = concatBytes(new Uint8Array([OPCODE_LOCAL_GET]), encodeULEB128(baseLocalIndex));
+      const rawIndexExpr = encodeExpr(inst.index.id, instructionsById, functionIndexByName, fn, localIndexBySlotId, arrayBaseLocalIndexBySlotId);
+      // v29-D4 (Gap A, Nested Literal Construction): when the stored
+      // VALUE is itself an array reference (arraySlot set, the SAME
+      // sentinel shape already proven for call arguments â€” D2's own
+      // work), it is NOT an ordinary SSA value â€” encodeExpr(-1, ...)
+      // would throw "no definition found for id %-1" (confirmed
+      // directly by a real emission attempt this round). The correct
+      // value is a direct read of the referenced inner array's own
+      // existing base-address local â€” the SAME local
+      // arrayBaseLocalIndexBySlotId already tracks for it, requiring
+      // no new allocation, no new local group.
+      const valueExpr = inst.value.arraySlot !== undefined
+        ? (() => {
+            const innerBaseLocalIndex = arrayBaseLocalIndexBySlotId.get(inst.value.arraySlot!);
+            if (innerBaseLocalIndex === undefined) {
+              throw new WasmUnsupportedError({ code: WASM_CODES.UNSUPPORTED_INSTRUCTION, functionName: fn.sourceName, message: `internal error: expected a validated array base local for inner array slot ${inst.value.arraySlot}` });
+            }
+            return concatBytes(new Uint8Array([OPCODE_LOCAL_GET]), encodeULEB128(innerBaseLocalIndex));
+          })()
+        // v29-D5 (Slice 5, array-of-structs): the structSlot-tagged
+        // analog of the arraySlot case immediately above â€” a struct
+        // reference used as an array element's own value (e.g.
+        // `[Point(1,2), Point(3,4)]`) is NOT an ordinary SSA value
+        // either; confirmed directly by a real emission attempt this
+        // round ("no definition found for id %-1"), the same failure
+        // mode as the arraySlot case, for the analogous, previously-
+        // unaddressed reference kind.
+        : inst.value.structSlot !== undefined
+        ? (() => {
+            const innerStructBaseLocalIndex = structBaseLocalIndexBySlotId.get(inst.value.structSlot!);
+            if (innerStructBaseLocalIndex === undefined) {
+              throw new WasmUnsupportedError({ code: WASM_CODES.UNSUPPORTED_INSTRUCTION, functionName: fn.sourceName, message: `internal error: expected a validated struct base local for inner struct slot ${inst.value.structSlot}` });
+            }
+            return concatBytes(new Uint8Array([OPCODE_LOCAL_GET]), encodeULEB128(innerStructBaseLocalIndex));
+          })()
+        : encodeExpr(inst.value.id, instructionsById, functionIndexByName, fn, localIndexBySlotId, arrayBaseLocalIndexBySlotId, structBaseLocalIndexBySlotId);
+      // FIX (per issues/triple-evaluation-of-array-index-expression.md):
+      // same materialization pattern as the array_load site above.
+      const scratchIndex = getIndexScratchLocalIndex(fn);
+      const materializedIndexExpr = concatBytes(new Uint8Array([OPCODE_LOCAL_GET]), encodeULEB128(scratchIndex));
+      const setScratch = concatBytes(rawIndexExpr, new Uint8Array([OPCODE_LOCAL_SET]), encodeULEB128(scratchIndex));
+      parts.push(setScratch);
+      // V29-D2 (fix B/آ§4): same runtime-header-read path as array_load,
+      // for the identical reason (a parameter's own real length is not
+      // known at compile time).
+      // v29-D5: a baseRef-driven write ALSO always reads the runtime
+      // header â€” its own real length can never be a compile-time
+      // constant either (slotMeta is undefined for it), mirroring
+      // array_load's own identical baseRef-aware logic exactly.
+      // Confirmed necessary directly: without this, the bounds check
+      // would have used the wrong, hardcoded fallback of 1.
+      const storeKnownLength: number | Uint8Array = (inst.baseRef || slotMeta?.isArrayParam === true || slotMeta?.isArrayResult === true)
+        ? encodeArrayLengthLoad(arrayBaseExpr)
+        : (slotMeta?.length ?? 1);
+      parts.push(encodeBoundsCheck(materializedIndexExpr, storeKnownLength));
+      // v29-D4/D5: an array_ref-typed element (this outer slot stores
+      // array references) OR a structSlot-tagged VALUE (this array
+      // stores struct references â€” e.g. Point[] â€” confirmed directly
+      // this round: the array's own slotMeta.type does not report
+      // "array_ref" for a struct-of-elements array, so the VALUE's own
+      // tag, not slotMeta.type alone, is the correct signal here) is
+      // written with the i32 variant â€” both are base addresses, never
+      // the full i64 scalar width.
+      const elementStore = (slotMeta?.type === "array_ref" || inst.value.structSlot !== undefined)
+        ? encodeArrayRefElementStore(arrayBaseExpr, materializedIndexExpr, valueExpr)
+        : encodeArrayElementStore(arrayBaseExpr, materializedIndexExpr, valueExpr);
+      parts.push(elementStore);
+    } else if (inst.kind === "field_store") {
+      // Struct support, Phase 1 (per WASM_BUMP_ALLOCATOR_STUDY.md آ§4,
+      // point 4): mirrors array_store's own "allocate on first use"
+      // pattern, but simpler â€” no header write (structs have none,
+      // per struct-memory.ts's own header comment), and no bounds
+      // check (fieldIndex is a compile-time-known constant from
+
+=== 4. WASM ARRAY MEMORY ALLOCATION ===
+/**
+ * Emits the bump-allocation sequence for one array of `elementCount`
+ * elements: read the bump Global into `localIndex` (this array's base
+ * address, an i32 local reused for every subsequent access to this
+ * array within the function), then advance the bump Global by this
+ * array's total size (`ARRAY_HEADER_SIZE + elementCount * ELEMENT_SIZE`
+ * â€” the SAME two named constants as every other computation in this
+ * module, per the single-source-of-truth requirement).
+ */
+export function encodeArrayAllocation(bumpGlobalIndex: number, localIndex: number, elementCount: number): Uint8Array {
+  const totalSize = ARRAY_HEADER_SIZE + elementCount * ELEMENT_SIZE;
+  const OPCODE_LOCAL_SET = 0x21;
+  return concatBytes(
+    new Uint8Array([OPCODE_GLOBAL_GET]), encodeULEB128(bumpGlobalIndex),
+    new Uint8Array([OPCODE_LOCAL_SET]), encodeULEB128(localIndex),
+    new Uint8Array([OPCODE_GLOBAL_GET]), encodeULEB128(bumpGlobalIndex),
+    new Uint8Array([OPCODE_I32_CONST]), encodeSLEB128(BigInt(totalSize)),
+    new Uint8Array([OPCODE_I32_ADD]),
+    new Uint8Array([OPCODE_GLOBAL_SET]), encodeULEB128(bumpGlobalIndex),
+  );
+}
+
+/** Encodes the module's `global` section: exactly one mutable `i32` global (the bump pointer), initialized to `BUMP_INITIAL_ADDRESS`. */
+export function encodeGlobalSection(): Uint8Array {
+  const SECTION_GLOBAL = 6;
+  const VALTYPE_I32 = 0x7f;
+  const MUTABLE = 0x01;
+  const globalEntry = concatBytes(
+    new Uint8Array([VALTYPE_I32, MUTABLE, OPCODE_I32_CONST]), encodeSLEB128(BigInt(BUMP_INITIAL_ADDRESS)), new Uint8Array([OPCODE_END]),
+  );
+  const payload = concatBytes(encodeULEB128(1), globalEntry);
+  return concatBytes(new Uint8Array([SECTION_GLOBAL]), encodeULEB128(payload.length), payload);
+}
+
+/** Encodes the module's `memory` section: exactly one memory, minimum 1 page (64KiB) â€” sufficient for every array this narrow phase can construct, with no dynamic growth (deferred, explicitly out of scope). */
+export function encodeMemorySection(): Uint8Array {
+  const SECTION_MEMORY = 5;
+  const LIMITS_MIN_ONLY = 0x00;
+  const MIN_PAGES = 1;
+  const payload = concatBytes(encodeULEB128(1), new Uint8Array([LIMITS_MIN_ONLY]), encodeULEB128(MIN_PAGES));
+  return concatBytes(new Uint8Array([SECTION_MEMORY]), encodeULEB128(payload.length), payload);
+}
+
+/** WASM constant specific to bounds checking (3.1B.2), not duplicated elsewhere. */
+const BLOCKTYPE_VOID = 0x40;
+
+/** Emits `i64.load` at `arrayBaseExpr` + offset 0 â€” reads the array's own
+ *  header, returning its real, current length as an i64 on the stack.
+ *  V29-D2: the runtime-length counterpart to `encodeArrayHeaderStore`
+ *  (which only writes it) â€” reads from the exact same offset that
+ *  function writes to, and that MEMORY_LAYOUT_IMMUTABLE_CONTRACT already
+ *  asserts holds the length. Used for array-typed function parameters,
+ *  whose real length cannot be known at compile time by the callee. */
+export function encodeArrayLengthLoad(arrayBaseExpr: Uint8Array): Uint8Array {
+  return concatBytes(arrayBaseExpr, new Uint8Array([OPCODE_I64_LOAD]), MEMARG_ALIGN8_OFFSET0);
+}
+
+/**
+ * Encodes the bounds check ratified in WASM_MEMORY_MODEL_SPEC.md آ§10b:
+ * `if (i32.or (index < 0) (index >= knownLength)) { unreachable }` â€”
+ * no `else` needed, mirroring the exact "if with only a then, no
+ * else" pattern already proven for `break`/`continue`
+ * (3.1A.6b/3.1A.6c).
+ *
+ * **FIXED (per issues/triple-evaluation-of-array-index-expression.md):
+ * `indexExpr` is still inserted twice here (once per comparison) and
+ * once more by this function's callers for the address computation â€”
+ * but callers now pass an already-MATERIALIZED index (a cheap
+ * `local.get` reading a scratch WASM local the caller computed the
+ * real expression into exactly once beforehand), not the raw
+ * expression itself. Duplicating a `local.get` is free (no
+ * re-evaluation of anything with side effects); only duplicating the
+ * ORIGINAL expression would have been a problem. This function's own
+ * signature and behavior are unchanged â€” the fix lives entirely in
+ * `emit-wasm.ts`'s callers (`getIndexScratchLocalIndex()` and its use
+ * at both array_load/array_store sites).
+ *
+ * Per آ§10b's Correction 1: `knownLength` is THIS PHASE's mechanism for
+ * obtaining the bound (the compile-time-known `IRLocalSlot.length`) â€”
+ * not baked into `array_load`/`array_store`'s own interface. A future
+ * phase reading the bound at runtime instead would only need to
+ * change how the bound value here is obtained, not this function's
+ * shape.
+ *
+ * V29-D2 (exactly the extension this comment's own prior text
+
+=== 5. IR LOCAL SLOT DEFINITION ===
+
+  src\shared\ir.ts:115://
+  src\shared\ir.ts:116:// This is deliberately NOT a redesign of SSA: every value flowing
+through
+  src\shared\ir.ts:117:// arithmetic/calls/etc. remains exactly as single-assignment as before
+  src\shared\ir.ts:118:// this phase. Only the storage for a subset of local variables gains an
+  src\shared\ir.ts:119:// explicit load/store indirection. A future Optimizer phase may promote
+  src\shared\ir.ts:120:// provably-single-definition slots back to pure SSA (a classic
+  src\shared\ir.ts:121:// "mem2reg"-style pass) — Level 2.6 does not require that pass to exist.
+  src\shared\ir.ts:122:
+> src\shared\ir.ts:123:export type IRLocalSlot = {
+  src\shared\ir.ts:124:  readonly id: number;      // unique within the function; a SEPARATE id
+space from SSA value ids
+  src\shared\ir.ts:125:  readonly name: string;    // original UR variable name, for debug
+symbols
+  src\shared\ir.ts:126:  readonly type: IRType;
+  src\shared\ir.ts:127:  /** Level 2.8: for a fixed-size array slot, the element count (>1).
+undefined/1 means an ordinary scalar slot (Level 2.6 behavior, unchanged) UNLESS isArray is
+explicitly true (see below). */
+  src\shared\ir.ts:128:  readonly length?: number;
+  src\shared\ir.ts:129:  /**
+  src\shared\ir.ts:130:   * Priority 3 Stabilization Sprint: present iff this slot represents
+  src\shared\ir.ts:131:   * an ARRAY PARAMETER (e.g. `function f(a: int[])`), as opposed to a
+  src\shared\ir.ts:132:   * fixed-size array LOCAL (`let a = [1,2,3]`, using `isArray`+`length`
+  src\shared\ir.ts:133:   * above, completely unchanged). A real, precise distinction: a
+  src\shared\ir.ts:134:   * parameter's own real array has no compile-time-known length (`int[]`
+  src\shared\ir.ts:135:   * carries no fixed size) and is passed by reference (matching real C
+  src\shared\ir.ts:136:   * array-parameter semantics, which itself decays to a pointer) -
+  src\shared\ir.ts:137:   * requiring a real pointer declaration (`int64_t* name;`), not a
+  src\shared\ir.ts:138:   * fixed-size array declaration (`int64_t name[N];`, which cannot be
+  src\shared\ir.ts:139:   * assigned a pointer value in real C). Mutually exclusive with
+  src\shared\ir.ts:140:   * `isArray`+`length` in practice (a slot is either a fixed-size
+  src\shared\ir.ts:141:   * local or a pointer-backed parameter, never both).
+  src\shared\ir.ts:142:   */
+  src\shared\ir.ts:143:  readonly isArrayParam?: boolean;
+  src\shared\ir.ts:144:  /**
+  src\shared\ir.ts:145:   * Gate 2R Remediation (per direct instruction): present iff this
+  src\shared\ir.ts:146:   * slot holds the result of an Array-returning function call
+  src\shared\ir.ts:147:   * (populated via resultArraySlot, not a direct array literal). Its
+  src\shared\ir.ts:148:   * length is a genuine runtime-only value (the callee decides how
+  src\shared\ir.ts:443:  readonly sourceName: string;
+  src\shared\ir.ts:444:  readonly params: readonly IRParam[];
+  src\shared\ir.ts:445:  readonly returnType: IRType;
+  src\shared\ir.ts:446:  /** Present iff this function's own real return type is a struct
+(Priority 2, Solution A) - matches the SAME established pattern as IRParam.structLayout, not a
+Union type (kept consistent with every other real precedent in this file). `returnType` remains
+"void" when this is set (unused/ignored, kept only for existing consumers). */
+  src\shared\ir.ts:447:  readonly returnStructLayout?: StructLayoutResult;
+  src\shared\ir.ts:448:  readonly blocks: readonly IRBasicBlock[];
+  src\shared\ir.ts:449:  readonly entryBlock: number;
+  src\shared\ir.ts:450:  readonly location: SourceLocation;
+> src\shared\ir.ts:451:  /** Local storage slots for reassignable variables that survive a CFG
+merge point (Level 2.6.1) — see IRLocalSlot above. Empty for straight-line functions with no
+such variables. */
+> src\shared\ir.ts:452:  readonly locals: readonly IRLocalSlot[];
+  src\shared\ir.ts:453:  /** FRI: present iff this function's own body is a real external call
+(Manifest-declared library function) rather than UR-compiled code. The interpreter executes
+this directly instead of running `blocks`. */
+  src\shared\ir.ts:454:  readonly external?: { readonly runtime: "python" | "javascript" | "c"
+| "rust" | "cpp" | "wasm" | "go" | "java" | "typescript" | "native"; readonly module: string;
+readonly symbol: string; readonly rawArgs?: string; readonly manifestBaseDir?: string };
+  src\shared\ir.ts:455:};
+  src\shared\ir.ts:456:
+  src\shared\ir.ts:457:// ── Extern symbols
+────────────────────────────────────────────────────────────
+  src\shared\ir.ts:458://
+  src\shared\ir.ts:459:// A function declared but not defined anywhere in this module — e.g. a
+  src\shared\ir.ts:460:// Runtime function or, in a future phase,
+  src\shared\ir.ts:461:// an FFI/DLL/shared-library import. Modeled as a full contract from the
+  src\shared\ir.ts:462:// start (not a bare string list) specifically so that adding Runtime,
+FFI,
+  src\shared\ir.ts:463:// DLL/shared-library support, or LLVM/WASM import declarations later
+never
+  src\shared\ir.ts:464:// requires redesigning this shape — only adding new ExternSymbol entries
+  src\shared\ir.ts:465:// and, if ever needed, a new CallingConvention variant.
+  src\shared\ir.ts:466://
+  src\shared\ir.ts:467:// Level 2.4 scope: only `kind: "runtime"` externs exist (the Runtime
+Core
+  src\shared\ir.ts:468:// function table — see RUNTIME_SPEC.md §4.3). "ffi"/"system"/"future"
+exist
+  src\shared\ir.ts:469:// now specifically so FFI/DLL/shared-library/future backend imports are
+  src\shared\ir.ts:470:// representable the moment a future phase needs them, without another
+  src\shared\ir.ts:471:// IRModule shape change then (per explicit review decision — do not wait
+  src\shared\ir.ts:472:// until they're needed to add the enum).
+  src\shared\ir.ts:473:
+  src\shared\ir.ts:474:export type CallingConvention = "c"; // only C calling convention exists
+in this phase; reserved for future variants (e.g. "stdcall") without a shape change
+  src\shared\ir.ts:475:
+  src\shared\ir.ts:476:export type ExternKind = "runtime" | "ffi" | "system" | "future";
+  src\shared\ir.ts:477:
+
+=== 6. ARRAY RUNTIME HELPERS ===
+
+
+
+
+Path       : D:\ur-bridge-v27-final\src\backend\c\emit-c.ts
+LineNumber : 204
+Line       :           // the new, unified ur_array_length() — replacing the direct
+
+Path       : D:\ur-bridge-v27-final\src\backend\c\emit-c.ts
+LineNumber : 209
+Line       :             ? `ur_array_length(${slotName})`
+
+Path       : D:\ur-bridge-v27-final\src\backend\c\emit-c.ts
+LineNumber : 337
+Line       :       const length = (inst.baseRef || slot?.isArrayResult) ?
+             `ur_array_length(${base})` : (slot?.runtimeLengthCName ?? slot?.length ?? 0);
+
+Path       : D:\ur-bridge-v27-final\src\backend\c\emit-c.ts
+LineNumber : 361
+Line       :       const length = (inst.baseRef || slot?.isArrayResult) ?
+             `ur_array_length(${base})` : (slot?.runtimeLengthCName ?? slot?.length ?? 0);
+
+Path       : D:\ur-bridge-v27-final\src\backend\c\emit-c.ts
+LineNumber : 791
+Line       :         // header, read uniformly via ur_array_length() everywhere
+
+
+
+**********************
+Windows PowerShell transcript end
+End time: 20261024223005
+**********************

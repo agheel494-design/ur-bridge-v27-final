@@ -1,0 +1,401 @@
+﻿**********************
+Windows PowerShell transcript start
+Start time: 20261024222542
+Username: عقيل\عقيل
+RunAs User: عقيل\عقيل
+Configuration Name: 
+Machine: عقيل (Microsoft Windows NT 10.0.19045.0)
+Host Application: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe
+Process ID: 12412
+PSVersion: 5.1.19041.7802
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.19041.7802
+BuildVersion: 10.0.19041.7802
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+
+=== 1. TYPECHECKER: EXPRESSION INFERENCE ===
+      if (targetTy && !isError(targetTy) && targetTy.kind !== "Unknown" && !isError(valueTy)) {
+        if (!isAssignable(valueTy, targetTy)) {
+          this.diags.push(typeError(TCODES.ASSIGN_TYPE_MISMATCH,
+            `cannot assign ${typeToString(valueTy)} to '${stmt.target.name}: ${typeToString(targetTy)}'`,
+            stmt.span));
+        }
+      }
+    } else {
+      this.inferExpr(stmt.target, env);
+    }
+  }
+
+  private checkIf(stmt: IfStatement, env: TypeEnv, retType: URType): void {
+    this.checkCondition(stmt.condition, env);
+    this.checkBlock(stmt.thenBranch, env, retType);
+    if (stmt.elseBranch) {
+      stmt.elseBranch.kind === "BlockStatement"
+        ? this.checkBlock(stmt.elseBranch, env, retType)
+        : this.checkIf(stmt.elseBranch, env, retType);
+    }
+  }
+
+  private checkCondition(expr: Expression, env: TypeEnv): void {
+    const ty = this.inferExpr(expr, env);
+    if (!isError(ty) && ty.kind !== "Unknown" &&
+        !(ty.kind === "Primitive" && ty.name === "Bool")) {
+      this.diags.push(typeError(TCODES.CONDITION_NOT_BOOL,
+        `condition must be Bool, got ${typeToString(ty)}`,
+        expr.span));
+    }
+  }
+
+  private checkReturn(stmt: ReturnStatement, env: TypeEnv, retType: URType): void {
+    if (!stmt.value) return;
+    const valTy = this.inferExpr(stmt.value, env);
+    // Native Pointer ABI Gate A (Type Design, authorized, narrow scope):
+    // the integer literal `0` specifically (not any Int expression in
+    // general â€” checked against the AST node itself, not just its
+    // inferred type) is treated as the null-pointer sentinel when the
+    // declared return type is NativePtr, matching the universal C
+    // convention (NULL == 0). This is deliberately NARROWER than a
+    // general "Int is assignable to NativePtr" rule, which would let a
+    // program fabricate an arbitrary fake pointer value from any
+    // integer expression (e.g. `return 42`) - a real security-relevant
+    // decision explicitly NOT made here, left for its own future
+    // design step if ever needed. This narrow rule exists specifically
+    // so a signatures.ur placeholder body (`return 0`, never actually
+    // executed for a real external/native function, exactly the same
+    // convention already used by every other admitted type) can
+    // type-check without requiring a broader coercion rule.
+    if (retType.kind === "Primitive" && retType.name === "NativePtr"
+        && stmt.value.kind === "IntLiteral" && stmt.value.value === 0) {
+      return;
+    }
+    if (!isError(valTy) && retType.kind !== "Unknown" && !isError(retType)) {
+      if (!isAssignable(valTy, retType)) {
+        this.diags.push(typeError(TCODES.RETURN_TYPE_MISMATCH,
+          `cannot return ${typeToString(valTy)}, expected ${typeToString(retType)}`,
+          stmt.span));
+      }
+    }
+  }
+
+  // â”€â”€ Expression inference â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+  inferExpr(expr: Expression, env: TypeEnv): URType {
+    switch (expr.kind) {
+      case "IntLiteral":    return T_INT;
+      case "FloatLiteral":  return T_FLOAT;
+      case "BoolLiteral":   return T_BOOL;
+      case "StringLiteral": return T_STRING;
+      case "CharLiteral":   return T_CHAR;
+      case "NullLiteral":   return tOptional(T_UNKNOWN);
+
+      case "ArrayLiteral": {
+        if (expr.elements.length === 0) {
+          this.diags.push(typeError(TCODES.EMPTY_ARRAY_LITERAL,
+            `empty array literal '[]' is not supported in this phase â€” its element type cannot be determined without an explicit type annotation (not yet supported)`,
+            expr.span));
+          return tArray(T_ERROR);
+        }
+        const firstTy = this.inferExpr(expr.elements[0]!, env);
+        for (let i = 1; i < expr.elements.length; i++) {
+          const elTy = this.inferExpr(expr.elements[i]!, env);
+          if (!isError(elTy) && !isError(firstTy) && !isAssignable(elTy, firstTy)) {
+            this.diags.push(typeError(TCODES.ARRAY_ELEMENT_TYPE_MISMATCH,
+              `array element ${i + 1} has type ${typeToString(elTy)}, expected ${typeToString(firstTy)} (from element 1)`,
+              expr.elements[i]!.span));
+          }
+        }
+        return tArray(firstTy);
+      }
+
+      case "Identifier": {
+        if (expr.name === "<error>") return T_ERROR;
+        return env.get(expr.name) ?? T_UNKNOWN;
+      }
+
+      case "UnaryExpression": {
+        const operandTy = this.inferExpr(expr.operand, env);
+        const result = unaryOpResultType(expr.operator, operandTy);
+        if (isError(result) && !isError(operandTy)) {
+          this.diags.push(typeError(TCODES.UNARY_TYPE_ERROR,
+            `operator '${expr.operator}' cannot be applied to ${typeToString(operandTy)}`,
+            expr.span));
+        }
+        return result;
+      }
+
+      case "BinaryExpression": {
+        const leftTy  = this.inferExpr(expr.left, env);
+        const rightTy = this.inferExpr(expr.right, env);
+        const result  = binaryOpResultType(expr.operator, leftTy, rightTy);
+        if (isError(result) && !isError(leftTy) && !isError(rightTy)) {
+          this.diags.push(typeError(TCODES.OPERATOR_TYPE_ERROR,
+            `operator '${expr.operator}' cannot be applied to ${typeToString(leftTy)} and ${typeToString(rightTy)}`,
+            expr.span));
+        }
+        return result;
+      }
+
+      case "ConditionalExpression": {
+        this.checkCondition(expr.condition, env);
+        const thenTy = this.inferExpr(expr.consequent, env);
+        const elseTy = this.inferExpr(expr.alternate, env);
+        if (isAssignable(thenTy, elseTy)) return elseTy;
+        if (isAssignable(elseTy, thenTy)) return thenTy;
+        return T_UNKNOWN;
+      }
+
+      case "CallExpression": {
+        const calleeTy = this.inferExpr(expr.callee, env);
+        const argTypes = expr.args.map(a => this.inferExpr(a, env));
+        if (calleeTy.kind === "Function") {
+          for (let i = 0; i < Math.min(argTypes.length, calleeTy.params.length); i++) {
+            const argTy   = argTypes[i]!;
+            const paramTy = calleeTy.params[i]!;
+            if (!isError(argTy) && !isError(paramTy) && paramTy.kind !== "Unknown") {
+              if (!isAssignable(argTy, paramTy)) {
+                this.diags.push(typeError(TCODES.CALL_ARG_TYPE_MISMATCH,
+                  `argument ${i + 1}: cannot pass ${typeToString(argTy)} as ${typeToString(paramTy)}`,
+                  expr.args[i]!.span));
+              }
+            }
+          }
+          return calleeTy.ret;
+        }
+        // Level 2.8, LANGUAGE_SYNTAX_1_1_SPEC.md آ§2.7: struct construction.
+        // `expr.callee` is an ordinary Identifier here (Semantic's
+        // walkCall already validated arity via SE3001 before TypeChecker
+        // ever runs â€” the precondition "zero Semantic diagnostics" means
+        // arg count === field count is already guaranteed by the time
+        // this code runs for a valid program). This is the FIRST
+        // TypeChecker-level check for Aggregates, per explicit review
+        // priority: `Point("abc", 5)` must be rejected here, not left to
+        // IR/Backend to discover as a miscompilation.
+        if (expr.callee.kind === "Identifier") {
+          const structTy = this.structTypes.get(expr.callee.name);
+          if (structTy && structTy.kind === "Struct") {
+            for (let i = 0; i < Math.min(argTypes.length, structTy.fields.length); i++) {
+              const argTy   = argTypes[i]!;
+              const fieldTy = structTy.fields[i]!.type;
+              if (!isError(argTy) && !isError(fieldTy) && fieldTy.kind !== "Unknown") {
+                if (!isAssignable(argTy, fieldTy)) {
+                  this.diags.push(typeError(TCODES.CALL_ARG_TYPE_MISMATCH,
+                    `${structTy.name}(...) argument ${i + 1} ('${structTy.fields[i]!.name}'): cannot pass ${typeToString(argTy)} as ${typeToString(fieldTy)}`,
+                    expr.args[i]!.span));
+                }
+              }
+            }
+            return structTy;
+          }
+        }
+        return T_UNKNOWN;
+      }
+
+      case "MemberExpression": {
+        const objTy = this.inferExpr(expr.object, env);
+        // Level 2.8: field access (`p.x`) â€” resolve against the object's
+        // struct type, per LANGUAGE_SYNTAX_1_1_SPEC.md آ§2.2. Falls back
+
+=== 2. ARRAY LITERAL IMPLEMENTATION ===
+
+
+Path       : D:\ur-bridge-v27-final\src\compiler\codegen\ir-builder.ts
+LineNumber : 258
+Line       :   private lowerArrayLiteral(elements: readonly Expression[], varName: string |
+             undefined, location: SourceLocation): { ref: IRValueRef; type: URType } | null {
+
+Path       : D:\ur-bridge-v27-final\src\compiler\codegen\ir-builder.ts
+LineNumber : 274
+Line       :       // case — an element that is itself an ArrayLiteral has ALREADY
+
+Path       : D:\ur-bridge-v27-final\src\compiler\codegen\ir-builder.ts
+LineNumber : 277
+Line       :       // nested ArrayLiteral is handled by the SAME "ArrayLiteral" case
+
+Path       : D:\ur-bridge-v27-final\src\compiler\codegen\ir-builder.ts
+LineNumber : 338
+Line       :       case "ArrayLiteral": {
+
+Path       : D:\ur-bridge-v27-final\src\compiler\codegen\ir-builder.ts
+LineNumber : 341
+Line       :         // lowerArrayLiteral used by VariableDeclaration (see its own
+
+Path       : D:\ur-bridge-v27-final\src\compiler\codegen\ir-builder.ts
+LineNumber : 346
+Line       :         return this.lowerArrayLiteral(expr.elements, undefined, location);
+
+Path       : D:\ur-bridge-v27-final\src\compiler\codegen\ir-builder.ts
+LineNumber : 639
+Line       :           // lowerArrayLiteral's own established invariant), so a
+
+Path       : D:\ur-bridge-v27-final\src\compiler\codegen\ir-builder.ts
+LineNumber : 1080
+Line       :         if (stmt.initializer.kind === "ArrayLiteral") {
+
+Path       : D:\ur-bridge-v27-final\src\compiler\codegen\ir-builder.ts
+LineNumber : 1081
+Line       :           const result = this.lowerArrayLiteral(stmt.initializer.elements,
+             stmt.name, location);
+
+Path       : D:\ur-bridge-v27-final\src\compiler\frontend\ast.ts
+LineNumber : 230
+Line       :   | ArrayLiteral
+
+Path       : D:\ur-bridge-v27-final\src\compiler\frontend\ast.ts
+LineNumber : 239
+Line       : export interface ArrayLiteral extends Node {
+
+Path       : D:\ur-bridge-v27-final\src\compiler\frontend\ast.ts
+LineNumber : 240
+Line       :   kind: "ArrayLiteral";
+
+Path       : D:\ur-bridge-v27-final\src\compiler\frontend\parser.ts
+LineNumber : 28
+Line       :   BoolLiteral, NullLiteral, ArrayLiteral, UnaryExpression, BinaryExpression,
+
+Path       : D:\ur-bridge-v27-final\src\compiler\frontend\parser.ts
+LineNumber : 164
+Line       :     // rejected at LOWERING (an `ArrayLiteral` inside an `ArrayLiteral`
+
+Path       : D:\ur-bridge-v27-final\src\compiler\frontend\parser.ts
+LineNumber : 165
+Line       :     // produces CG1001 "expression kind 'ArrayLiteral' is not supported
+
+Path       : D:\ur-bridge-v27-final\src\compiler\frontend\parser.ts
+LineNumber : 595
+Line       :         return { kind: "ArrayLiteral", elements, span: { startLine:
+             span(open).startLine, startColumn: span(open).startColumn, endLine:
+             span(close).endLine, endColumn: span(close).endColumn } } as ArrayLiteral;
+
+Path       : D:\ur-bridge-v27-final\src\compiler\semantic\index.ts
+LineNumber : 391
+Line       :       case "ArrayLiteral":
+
+Path       : D:\ur-bridge-v27-final\src\compiler\typesystem\array-object-model-builder.ts
+LineNumber : 47
+Line       :  * `ArrayLiteral` (`let a = [1,2,3]`). A direct `ArrayLiteral` used as
+
+Path       : D:\ur-bridge-v27-final\src\compiler\typesystem\array-object-model-builder.ts
+LineNumber : 63
+Line       :       if (stmt.kind === "VariableDeclaration" && stmt.initializer?.kind ===
+             "ArrayLiteral") {
+
+Path       : D:\ur-bridge-v27-final\src\compiler\typesystem\checker.ts
+LineNumber : 355
+Line       :       case "ArrayLiteral": {
+
+
+
+
+=== 3. ARRAY LOWERING AND STORAGE ===
+
+
+Path       : D:\ur-bridge-v27-final\src\compiler\codegen\ir-builder.ts
+LineNumber : 23
+Line       :   IRType, IRValueRef, IRBinOp, IRUnOp, IRLocalSlot, ExternSymbol,
+             StructLayoutResult, IRParam,
+
+Path       : D:\ur-bridge-v27-final\src\compiler\codegen\ir-builder.ts
+LineNumber : 48
+Line       :   private locals: IRLocalSlot[] = [];       // local slots declared so far
+
+Path       : D:\ur-bridge-v27-final\src\compiler\codegen\ir-builder.ts
+LineNumber : 67
+Line       :   // real IRLocalSlot carrying its own `structLayout`, accessed via the
+
+Path       : D:\ur-bridge-v27-final\src\compiler\codegen\ir-builder.ts
+LineNumber : 72
+Line       :   // convenience — same object already stored on the IRLocalSlot itself).
+
+Path       : D:\ur-bridge-v27-final\src\compiler\codegen\ir-builder.ts
+LineNumber : 307
+Line       :     // any IRLocalSlot is created for this array — per the already-
+
+Path       : D:\ur-bridge-v27-final\src\compiler\codegen\ir-builder.ts
+LineNumber : 1648
+Line       :         return { name: p.name, type: elementIrType, arrayLength: 1,
+             lengthParamCName };
+
+Path       : D:\ur-bridge-v27-final\src\compiler\codegen\lower-to-ir.ts
+LineNumber : 42
+Line       :   IRType, IRValueRef, IRBinOp, IRUnOp, IRLocalSlot, ExternSymbol,
+             StructLayoutResult,
+
+Path       : D:\ur-bridge-v27-final\src\compiler\typesystem\checker.ts
+LineNumber : 357
+Line       :           this.diags.push(typeError(TCODES.EMPTY_ARRAY_LITERAL,
+
+Path       : D:\ur-bridge-v27-final\src\compiler\typesystem\type-diagnostics.ts
+LineNumber : 42
+Line       :   EMPTY_ARRAY_LITERAL: "TY6002", // Level 2.8 — rejected per review: no Generics
+             means no way to express an empty array's element type
+
+
+
+
+=== 4. EXISTING ARRAY TEST CONTRACTS ===
+    expect(r.exitCode).toBe(101);
+  });
+
+  it("a large array (1000 elements) works correctly", async () => {
+    const nums = Array.from({ length: 1000 }, (_, i) => i).join(",");
+    const { r } = await compileAndRun(`function main(): int\n  let arr = [${nums}]\n  print(arr[999])\n  return 0\nend\n`);
+    expect(r.stdout.trim()).toBe("999");
+  });
+
+  it("iteration over an array via while produces the correct sum", async () => {
+    const { r } = await compileAndRun('function main(): int\n  let arr = [10, 20, 30]\n  let i = 0\n  let total = 0\n  while i < 3\n    total = total + arr[i]\n    i = i + 1\n  end\n  print(total)\n  return 0\nend\n');
+    expect(r.stdout.trim()).toBe("60");
+  });
+});
+
+describe("Stage 1.2 Arrays â€” confirmed NOT supported (clear rejection, documented, not a crash)", () => {
+  it("empty array literal [] is rejected with a clear diagnostic", () => {
+    const { tokens } = lex('function main(): int\n  let arr = []\n  return 0\nend\n');
+    const { program } = parse(tokens);
+    const tc = typeCheck(program);
+    const errors = (tc.diagnostics ?? []).filter((d: any) => d.severity === "error");
+    expect(errors.length).toBeGreaterThan(0);
+    expect(errors[0]!.code).toBe("TY6002");
+  });
+
+  // RB3-TEST-REALIGNMENT - DR-RB3-01 (APPROVED) / KNOWN_LIMITATIONS.md [V1.0-DOC-DRIFT-MULTIARRAY-003]:
+  // nested arrays are a supported, in-contract V1.0 capability. Realigned to: lowers AND runs correctly on C.
+  it("[DR-RB3-01] nested array literals ([[1,2],[3,4]]) lower and run correctly on the C backend (formerly: rejected at Lowering)", () => {
+    const { tokens } = lex('function main(): int\n  let a = [[1, 2], [3, 4]]\n  return a[1][0] + a[0][1]\nend\n');
+    const { program } = parse(tokens);
+    const ir = lowerToIR(program, "t.ur", "t");
+    expect(ir.ok).toBe(true);
+    if (!ir.ok) return;
+    const compiled = compileC(emitC(ir.value), "a.out", { captureWarnings: true });
+    expect(compiled.ok).toBe(true);
+    if (!compiled.ok) return;
+    try { expect(runExecutable(compiled.value).exitCode).toBe(5); } finally { cleanupExecutable(compiled.value); }
+  });
+
+  it("[DR-RB3-01] multi-dimensional array TYPE annotations (int[][]) type-check, lower and run correctly end-to-end (formerly: rejected at Lowering)", () => {
+    const { tokens } = lex('function main(): int\n  let arr: int[][] = [[1,2],[3,4]]\n  return arr[1][1]\nend\n');
+    const { program } = parse(tokens);
+    const tc = typeCheck(program);
+    expect((tc.diagnostics ?? []).filter((d: any) => d.severity === "error")).toEqual([]);
+    const ir = lowerToIR(program, "t.ur", "t");
+    expect(ir.ok).toBe(true);
+    if (!ir.ok) return;
+    const compiled = compileC(emitC(ir.value), "a.out", { captureWarnings: true });
+    expect(compiled.ok).toBe(true);
+    if (!compiled.ok) return;
+    try { expect(runExecutable(compiled.value).exitCode).toBe(4); } finally { cleanupExecutable(compiled.value); }
+  });
+});
+
+describe("General ArrayLiteral Lowering (ADR-004, Defer Log Item 1 - implementation gap closed)", () => {
+
+=== REPORT PATH ===
+.\repair-evidence\G1-array-path-20261024-222542.txt
+**********************
+Windows PowerShell transcript end
+End time: 20261024222543
+**********************

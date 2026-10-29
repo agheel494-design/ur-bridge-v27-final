@@ -1,0 +1,25 @@
+{
+  "name": "010_for_deferred_to_1_1",
+  "parseDiagnostics": [],
+  "typecheckDiagnostics": [],
+  "lowerOk": false,
+  "lowerDiagnostics": [
+    {
+      "source": "codegen",
+      "severity": "error",
+      "code": "CG1001",
+      "message": "for-loop iterable must be a plain variable (e.g. 'for i in arr'), not a more complex expression",
+      "location": {
+        "file": "010_for_deferred_to_1_1.ur",
+        "start": {
+          "line": 3,
+          "column": 3
+        },
+        "end": {
+          "line": 5,
+          "column": 5
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+
+  SQLite3 FFI — Step 1: version/ABI (generic loader + HarnessExecutor)
+    ✓ loads real library; sqlite3_libversion() and sqlite3_sourceid() succeed
+
+  SQLite3 FFI — Steps 2–11: full CRUD with real library, no simulation
+    ✓ Step 2: open in-memory db — handle is non-null, rc is SQLITE_OK
+    ✓ Step 3: CREATE TABLE returns SQLITE_DONE
+    ✓ Step 4: INSERT with parameter binding — changes() and last_insert_rowid()
+    ✓ Step 5: SELECT — column count, types, values correct for both rows
+    ✓ Step 6: UPDATE and DELETE — changes() reports correct affected row count
+    ✓ Step 7a: invalid SQL → non-zero rc, non-empty errmsg
+    ✓ Step 7b: NOT NULL constraint violation → SQLITE_CONSTRAINT (19)
+    ✓ Step 7c: open nonexistent path with READONLY → fails gracefully (rc != 0)
+    ✓ Step 8: NULL values — bind_null → column_type returns SQLITE_NULL (5)
+    ✓ Step 9: UTF-8 round-trip — Arabic, Japanese, emoji survive bind/column intact
+    ✓ Step 10: BEGIN + ROLLBACK — row absent after rollback
+    ✓ Step 11: sqlite3_close returns SQLITE_OK — clean resource release
+
+────────────────────────────────────────
+Tests:  13 total
+Passed: 13
+Failed: 0
+
+✅ All 13 tests passed

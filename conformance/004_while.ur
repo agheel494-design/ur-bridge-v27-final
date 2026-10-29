@@ -1,0 +1,9 @@
+function main(): int
+  let total = 0
+  let i = 1
+  while i <= 10
+    total = total + i
+    i = i + 1
+  end
+  return total
+end

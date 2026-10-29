@@ -1,0 +1,1071 @@
+﻿**********************
+Windows PowerShell transcript start
+Start time: 20261024223639
+Username: عقيل\عقيل
+RunAs User: عقيل\عقيل
+Configuration Name: 
+Machine: عقيل (Microsoft Windows NT 10.0.19045.0)
+Host Application: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe
+Process ID: 12412
+PSVersion: 5.1.19041.7802
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.19041.7802
+BuildVersion: 10.0.19041.7802
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+
+=== 1. IR BUILDER IMPORTS AND TYPE HELPERS ===
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// UR â€” Compiler Pipeline: IRBuilder (AST â†’ IR lowering machinery)
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+//
+// Extracted from lower-to-ir.ts (Architecture Freeze Audit, per official
+// directive: split files exceeding 1,000 lines). Pure separation, zero
+// behavioral change - IRBuilder's own body is byte-for-byte identical to
+// its own prior body in lower-to-ir.ts, only the file/module boundary moved.
+//
+// lower-to-ir.ts's own lowerToIR() function is the orchestrator: it walks
+// the Program's top-level declarations and calls this class's own
+// lowerFunction() once per real UR function - all the actual expression/
+// statement lowering machinery for a SINGLE function lives here.
+
+import type {
+  Program, FunctionDecl, Statement, Expression, BlockStatement,
+} from "../frontend/ast.js";
+import { resolveTypeRef } from "../typesystem/type-env.js";
+import { binaryOpResultType, unaryOpResultType } from "../typesystem/compatibility.js";
+import { T_INT, T_FLOAT, T_BOOL, T_STRING, T_CHAR, T_UNKNOWN, tArray, tStruct, type URType } from "../typesystem/types.js";
+import type {
+  IRModule, IRFunction, IRBasicBlock, IRInstruction, IRTerminator,
+  IRType, IRValueRef, IRBinOp, IRUnOp, IRLocalSlot, ExternSymbol, StructLayoutResult, IRParam,
+} from "../../shared/ir.js";
+import { computeStructLayout } from "../typesystem/struct-layout-calculator.js";
+import { lookupNativeLibrary, lookupNativeFunction } from "../semantic/native-library-registry.js";
+import { fromAstSpan, type SourceLocation } from "../../shared/locations.js";
+import { qualifiedName as makeQualifiedName } from "../../shared/symbols.js";
+import { makeDiagnostic, CODEGEN_CODES, type SharedDiagnostic } from "../../shared/diagnostics.js";
+import { RUNTIME_CORE_EXTERNS, resolveBuiltinExtern } from "../../shared/runtime-table.js";
+import { lookupBuiltin } from "../semantic/builtins-registry.js";
+import { toIRType, collectAssignedNames, collectAssignedNamesInIf, BINOP_MAP, UNOP_MAP, type FnSignature, type VarBinding } from "./lower-to-ir-helpers.js";
+
+export
+class IRBuilder {
+  private nextId = 0;
+  private instructions: IRInstruction[] = []; // accumulator for the CURRENT block being built
+  private readonly diagnostics: SharedDiagnostic[] = [];
+  private readonly valueTypes = new Map<number, URType>(); // SSA id -> its URType, for downstream binop resolution
+  private readonly varEnv = new Map<string, VarBinding>();  // current binding (ssa or slot) for a variable name
+  private readonly varTypes = new Map<string, URType>();    // declared/inferred URType for a variable name
+
+  // â”€â”€ Multi-block CFG state (Phase 2.6.2) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  private blocks: IRBasicBlock[] = [];      // finished blocks so far
+  private currentBlockId = 0;
+  private currentBlockLabel = "entry";
+  private nextBlockId = 1;                  // 0 is always the entry block
+  private locals: IRLocalSlot[] = [];       // local slots declared so far
+  private nextSlotId = 0;
+
+  // â”€â”€ Loop context stack (Phase 2.6.4) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  //
+  // Pushed on entering a `while`'s body lowering, popped on exit. `break`
+  // jumps to the innermost loop's exit block (playing the same role as
+  // if/else's merge block â€” the single reconvergence point after the
+  // construct). `continue` jumps to the innermost loop's HEADER block
+  // (the condition re-check), never the body â€” per explicit review
+  // requirement, so a `continue` correctly re-evaluates the loop
+  // condition rather than skipping straight back into the body.
+  private loopStack: Array<{ headerBlockId: number; exitBlockId: number }> = [];
+
+  // â”€â”€ Struct state (Level 2.8) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  //
+  // REVISED (per STRUCT_IR_DESIGN.md/STRUCT_MEMORY_LAYOUT.md, superseding
+  // the prior "each field is its own Local Slot" approach described
+  // above for historical context): a struct-typed variable is now ONE
+  // real IRLocalSlot carrying its own `structLayout`, accessed via the
+  // real `field_load`/`field_store` instructions â€” not N independent
+  // scalar slots joined only by external, Lowering-pass-only
+  // bookkeeping. `structVarSlot` tracks, for each struct-typed variable
+  // currently in scope, that ONE slot's id (and its own layout, for
+  // convenience â€” same object already stored on the IRLocalSlot itself).
+  private readonly structVarSlot = new Map<string, { slotId: number; layout: StructLayoutResult }>();
+
+  constructor(
+    private readonly file: string,
+    private readonly functionSignatures: Map<string, FnSignature>,
+    private readonly structLayouts: Map<string, StructLayoutResult>,
+    /** Real, resolved URType per struct name (local + imported), used for varTypes bookkeeping so a struct field's own real type (not a T_UNKNOWN placeholder) is known for print()/type-dependent codegen decisions. Fixes a real bug found live: field values were previously typed T_UNKNOWN, causing print() to reject them as 'void'. */
+    private readonly structUrTypes: Map<string, URType> = new Map(),
+    // Stage 3.1 â€” Native Library Registry member-call support: the set of
+    // names actually `import`ed in this program (so `x.y()` where `x` was
+    // never imported is rejected with a clear message, not silently
+    // resolved), and a MODULE-LEVEL shared map (not per-IRBuilder â€” every
+    // function in the module shares one extern table, matching how a real
+    // C program only needs one `extern` declaration per symbol regardless
+    // of how many functions call it) accumulating exactly one ExternSymbol
+    // per distinct native function actually called anywhere in the module.
+    private readonly importedNames: ReadonlySet<string> = new Set(),
+    private readonly ffiExterns: Map<string, ExternSymbol> = new Map(),
+  ) {}
+
+  private freshId(): number {
+    return this.nextId++;
+  }
+
+  private allocBlockId(): number {
+    return this.nextBlockId++;
+  }
+
+  /**
+   * Ends the CURRENT block with the given terminator, pushing it into
+   * `this.blocks`, then switches to a new (empty) current block with the
+   * given id/label. This is the ONLY place a block is "finished" â€” every
+   * control-flow construct (if/else today; while/break/continue in later
+   * phases) is built purely by calling this and allocBlockId(), never by
+   * any construct-specific special-casing (per CFG_SPEC.md's "if is just
+   * a use of the general CFG, not a special case" principle).
+   */
+  private finishBlockAndSwitchTo(terminator: IRTerminator, newBlockId: number, newBlockLabel: string): void {
+    this.blocks.push({ id: this.currentBlockId, label: this.currentBlockLabel, instructions: this.instructions, terminator });
+    this.currentBlockId = newBlockId;
+    this.currentBlockLabel = newBlockLabel;
+    this.instructions = [];
+  }
+
+  private loc(span: { startLine: number; startColumn: number; endLine: number; endColumn: number }): SourceLocation {
+    return fromAstSpan(this.file, span);
+  }
+
+
+=== 2. AST TYPE REFERENCE DEFINITION ===
+
+
+IgnoreCase : True
+LineNumber : 119
+Line       : export interface TypeRef extends Node {
+Filename   : ast.ts
+Path       : D:\ur-bridge-v27-final\src\compiler\frontend\ast.ts
+Pattern    : interface TypeRef|type TypeRef|arrayDepth
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 121
+Line       :   /** Canonical type name: "int" not "عدد" (canonicalized during parsing). Never
+             includes "[]" — array-ness is tracked separately in arrayDepth. */
+Filename   : ast.ts
+Path       : D:\ur-bridge-v27-final\src\compiler\frontend\ast.ts
+Pattern    : interface TypeRef|type TypeRef|arrayDepth
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 125
+Line       :   arrayDepth?: number | undefined;
+Filename   : ast.ts
+Path       : D:\ur-bridge-v27-final\src\compiler\frontend\ast.ts
+Pattern    : interface TypeRef|type TypeRef|arrayDepth
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 172
+Line       :     // resolveTypeRef correctly honors arrayDepth — the actual rejection
+Filename   : parser.ts
+Path       : D:\ur-bridge-v27-final\src\compiler\frontend\parser.ts
+Pattern    : interface TypeRef|type TypeRef|arrayDepth
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 177
+Line       :     let arrayDepth = 0;
+Filename   : parser.ts
+Path       : D:\ur-bridge-v27-final\src\compiler\frontend\parser.ts
+Pattern    : interface TypeRef|type TypeRef|arrayDepth
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 183
+Line       :         arrayDepth++;
+Filename   : parser.ts
+Path       : D:\ur-bridge-v27-final\src\compiler\frontend\parser.ts
+Pattern    : interface TypeRef|type TypeRef|arrayDepth
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 189
+Line       :     return { kind: "TypeRef", name: canonical, arrayDepth: arrayDepth ||
+             undefined, span: span(t) };
+Filename   : parser.ts
+Path       : D:\ur-bridge-v27-final\src\compiler\frontend\parser.ts
+Pattern    : interface TypeRef|type TypeRef|arrayDepth
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+
+
+
+=== 3. TYPE RESOLUTION HELPERS ===
+
+
+IgnoreCase : True
+LineNumber : 184
+Line       :     // `toIRType(type)` unconditionally for EVERY slot-backed variable
+Filename   : ir-builder.ts
+Path       : D:\ur-bridge-v27-final\src\compiler\codegen\ir-builder.ts
+Pattern    : resolveOptionalTypeRef|function resolveTypeRef|export function
+             resolveTypeRef|toIRType\(
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 185
+Line       :     // reference, including array-typed ones. `toIRType()`'s own comment
+Filename   : ir-builder.ts
+Path       : D:\ur-bridge-v27-final\src\compiler\codegen\ir-builder.ts
+Pattern    : resolveOptionalTypeRef|function resolveTypeRef|export function
+             resolveTypeRef|toIRType\(
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 207
+Line       :     this.instructions.push({ kind: "load", id, type: toIRType(type), slot:
+             binding.slotId, location });
+Filename   : ir-builder.ts
+Path       : D:\ur-bridge-v27-final\src\compiler\codegen\ir-builder.ts
+Pattern    : resolveOptionalTypeRef|function resolveTypeRef|export function
+             resolveTypeRef|toIRType\(
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 236
+Line       :     this.locals.push({ id: slotId, name, type: toIRType(type) });
+Filename   : ir-builder.ts
+Path       : D:\ur-bridge-v27-final\src\compiler\codegen\ir-builder.ts
+Pattern    : resolveOptionalTypeRef|function resolveTypeRef|export function
+             resolveTypeRef|toIRType\(
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 284
+Line       :       // is "array_ref" (a real, distinct IR type — not toIRType()'d,
+Filename   : ir-builder.ts
+Path       : D:\ur-bridge-v27-final\src\compiler\codegen\ir-builder.ts
+Pattern    : resolveOptionalTypeRef|function resolveTypeRef|export function
+             resolveTypeRef|toIRType\(
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 318
+Line       :     const elementIRType = toIRType(loweredElements[0]!.type);
+Filename   : ir-builder.ts
+Path       : D:\ur-bridge-v27-final\src\compiler\codegen\ir-builder.ts
+Pattern    : resolveOptionalTypeRef|function resolveTypeRef|export function
+             resolveTypeRef|toIRType\(
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 485
+Line       :         this.instructions.push({ kind: "binop", id, type: toIRType(resultType),
+             op, left: left.ref, right: right.ref, location });
+Filename   : ir-builder.ts
+Path       : D:\ur-bridge-v27-final\src\compiler\codegen\ir-builder.ts
+Pattern    : resolveOptionalTypeRef|function resolveTypeRef|export function
+             resolveTypeRef|toIRType\(
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 499
+Line       :         this.instructions.push({ kind: "unop", id, type: toIRType(resultType), op,
+             operand: operand.ref, location });
+Filename   : ir-builder.ts
+Path       : D:\ur-bridge-v27-final\src\compiler\codegen\ir-builder.ts
+Pattern    : resolveOptionalTypeRef|function resolveTypeRef|export function
+             resolveTypeRef|toIRType\(
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 548
+Line       :               const actualType = toIRType(lowered.type);
+Filename   : ir-builder.ts
+Path       : D:\ur-bridge-v27-final\src\compiler\codegen\ir-builder.ts
+Pattern    : resolveOptionalTypeRef|function resolveTypeRef|export function
+             resolveTypeRef|toIRType\(
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 659
+Line       :             this.locals.push({ id: slotId, name: `array_tmp_${slotId}`, type:
+             toIRType(sig.returnType.element), isArray: true, isArrayResult: true });
+Filename   : ir-builder.ts
+Path       : D:\ur-bridge-v27-final\src\compiler\codegen\ir-builder.ts
+Pattern    : resolveOptionalTypeRef|function resolveTypeRef|export function
+             resolveTypeRef|toIRType\(
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 664
+Line       :           this.instructions.push({ kind: "call", id, type:
+             toIRType(sig.returnType), callee: sig.qualifiedName, args, location });
+Filename   : ir-builder.ts
+Path       : D:\ur-bridge-v27-final\src\compiler\codegen\ir-builder.ts
+Pattern    : resolveOptionalTypeRef|function resolveTypeRef|export function
+             resolveTypeRef|toIRType\(
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 756
+Line       :           const argIRType = loweredArgs.length > 0 ?
+             toIRType(loweredArgs[0]!.type) : undefined;
+Filename   : ir-builder.ts
+Path       : D:\ur-bridge-v27-final\src\compiler\codegen\ir-builder.ts
+Pattern    : resolveOptionalTypeRef|function resolveTypeRef|export function
+             resolveTypeRef|toIRType\(
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 771
+Line       :             const actualType = toIRType(loweredArgs[i]!.type);
+Filename   : ir-builder.ts
+Path       : D:\ur-bridge-v27-final\src\compiler\codegen\ir-builder.ts
+Pattern    : resolveOptionalTypeRef|function resolveTypeRef|export function
+             resolveTypeRef|toIRType\(
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 872
+Line       :             // 3-deep access here). This exact toIRType(Array) gap was
+Filename   : ir-builder.ts
+Path       : D:\ur-bridge-v27-final\src\compiler\codegen\ir-builder.ts
+Pattern    : resolveOptionalTypeRef|function resolveTypeRef|export function
+             resolveTypeRef|toIRType\(
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 880
+Line       :             const innerIrType = innerElementType.kind === "Array" ? "array_ref" :
+             toIRType(innerElementType);
+Filename   : ir-builder.ts
+Path       : D:\ur-bridge-v27-final\src\compiler\codegen\ir-builder.ts
+Pattern    : resolveOptionalTypeRef|function resolveTypeRef|export function
+             resolveTypeRef|toIRType\(
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 1453
+Line       :           this.instructions.push({ kind: "array_load", id: elemId, type:
+             toIRType(elementType), slot: arrSlotId, index: { id: idxForLoadId }, location });
+Filename   : ir-builder.ts
+Path       : D:\ur-bridge-v27-final\src\compiler\codegen\ir-builder.ts
+Pattern    : resolveOptionalTypeRef|function resolveTypeRef|export function
+             resolveTypeRef|toIRType\(
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 1577
+Line       :       const irType = toIRType(paramUrType);
+Filename   : ir-builder.ts
+Path       : D:\ur-bridge-v27-final\src\compiler\codegen\ir-builder.ts
+Pattern    : resolveOptionalTypeRef|function resolveTypeRef|export function
+             resolveTypeRef|toIRType\(
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 1615
+Line       :         // element itself is Array-kind (a int[][] parameter), toIRType()
+Filename   : ir-builder.ts
+Path       : D:\ur-bridge-v27-final\src\compiler\codegen\ir-builder.ts
+Pattern    : resolveOptionalTypeRef|function resolveTypeRef|export function
+             resolveTypeRef|toIRType\(
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 1637
+Line       :         const elementIrType = paramUrType.element.kind === "Array" ? "array_ref" :
+             toIRType(paramUrType.element);
+Filename   : ir-builder.ts
+Path       : D:\ur-bridge-v27-final\src\compiler\codegen\ir-builder.ts
+Pattern    : resolveOptionalTypeRef|function resolveTypeRef|export function
+             resolveTypeRef|toIRType\(
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 1720
+Line       :       returnType: toIRType(returnType),
+Filename   : ir-builder.ts
+Path       : D:\ur-bridge-v27-final\src\compiler\codegen\ir-builder.ts
+Pattern    : resolveOptionalTypeRef|function resolveTypeRef|export function
+             resolveTypeRef|toIRType\(
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 14
+Line       : export function toIRType(t: URType): IRType {
+Filename   : lower-to-ir-helpers.ts
+Path       : D:\ur-bridge-v27-final\src\compiler\codegen\lower-to-ir-helpers.ts
+Pattern    : resolveOptionalTypeRef|function resolveTypeRef|export function
+             resolveTypeRef|toIRType\(
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 26
+Line       :   if (t.kind === "Unknown") return "void"; // convention: no return-type
+             annotation → resolveOptionalTypeRef returns T_UNKNOWN
+Filename   : lower-to-ir-helpers.ts
+Path       : D:\ur-bridge-v27-final\src\compiler\codegen\lower-to-ir-helpers.ts
+Pattern    : resolveOptionalTypeRef|function resolveTypeRef|export function
+             resolveTypeRef|toIRType\(
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 30
+Line       :   // (`kind === "Array" ? "array_ref" : toIRType(...)`), confirmed
+Filename   : lower-to-ir-helpers.ts
+Path       : D:\ur-bridge-v27-final\src\compiler\codegen\lower-to-ir-helpers.ts
+Pattern    : resolveOptionalTypeRef|function resolveTypeRef|export function
+             resolveTypeRef|toIRType\(
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 113
+Line       :   // toIRType() then mapped to "void", producing the "field has type
+Filename   : lower-to-ir.ts
+Path       : D:\ur-bridge-v27-final\src\compiler\codegen\lower-to-ir.ts
+Pattern    : resolveOptionalTypeRef|function resolveTypeRef|export function
+             resolveTypeRef|toIRType\(
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 126
+Line       :   // NOTHING to do with toIRType() or struct-layout-calculator.ts, both
+Filename   : lower-to-ir.ts
+Path       : D:\ur-bridge-v27-final\src\compiler\codegen\lower-to-ir.ts
+Pattern    : resolveOptionalTypeRef|function resolveTypeRef|export function
+             resolveTypeRef|toIRType\(
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 160
+Line       :       // real, distinct "array_ref" IRType, NEVER toIRType()'d directly
+Filename   : lower-to-ir.ts
+Path       : D:\ur-bridge-v27-final\src\compiler\codegen\lower-to-ir.ts
+Pattern    : resolveOptionalTypeRef|function resolveTypeRef|export function
+             resolveTypeRef|toIRType\(
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 163
+Line       :       // outer element type). toIRType()'s own documented contract
+Filename   : lower-to-ir.ts
+Path       : D:\ur-bridge-v27-final\src\compiler\codegen\lower-to-ir.ts
+Pattern    : resolveOptionalTypeRef|function resolveTypeRef|export function
+             resolveTypeRef|toIRType\(
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 170
+Line       :       const fieldIrType = fieldType.kind === "Array" ? "array_ref" :
+             toIRType(fieldType);
+Filename   : lower-to-ir.ts
+Path       : D:\ur-bridge-v27-final\src\compiler\codegen\lower-to-ir.ts
+Pattern    : resolveOptionalTypeRef|function resolveTypeRef|export function
+             resolveTypeRef|toIRType\(
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 236
+Line       :         params: fn.params.map(p => ({ name: p.name, type:
+             toIRType(sig.paramTypes[fn.params.indexOf(p)] ?? T_UNKNOWN) })),
+Filename   : lower-to-ir.ts
+Path       : D:\ur-bridge-v27-final\src\compiler\codegen\lower-to-ir.ts
+Pattern    : resolveOptionalTypeRef|function resolveTypeRef|export function
+             resolveTypeRef|toIRType\(
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 237
+Line       :         returnType: toIRType(sig.returnType),
+Filename   : lower-to-ir.ts
+Path       : D:\ur-bridge-v27-final\src\compiler\codegen\lower-to-ir.ts
+Pattern    : resolveOptionalTypeRef|function resolveTypeRef|export function
+             resolveTypeRef|toIRType\(
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 11
+Line       : import { resolveOptionalTypeRef } from "../typesystem/type-env.js";
+Filename   : export-checker.ts
+Path       : D:\ur-bridge-v27-final\src\compiler\module\export-checker.ts
+Pattern    : resolveOptionalTypeRef|function resolveTypeRef|export function
+             resolveTypeRef|toIRType\(
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 69
+Line       :     const ty = resolveOptionalTypeRef(g.type);
+Filename   : export-checker.ts
+Path       : D:\ur-bridge-v27-final\src\compiler\module\export-checker.ts
+Pattern    : resolveOptionalTypeRef|function resolveTypeRef|export function
+             resolveTypeRef|toIRType\(
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 100
+Line       :     const paramTypes: URType[] = fn.params.map(p =>
+             resolveOptionalTypeRef(p.type));
+Filename   : export-checker.ts
+Path       : D:\ur-bridge-v27-final\src\compiler\module\export-checker.ts
+Pattern    : resolveOptionalTypeRef|function resolveTypeRef|export function
+             resolveTypeRef|toIRType\(
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 101
+Line       :     const retType: URType = resolveOptionalTypeRef(fn.returnType);
+Filename   : export-checker.ts
+Path       : D:\ur-bridge-v27-final\src\compiler\module\export-checker.ts
+Pattern    : resolveOptionalTypeRef|function resolveTypeRef|export function
+             resolveTypeRef|toIRType\(
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 122
+Line       :     const fields = st.fields.map(f => ({ name: f.name, type:
+             resolveOptionalTypeRef(f.type) }));
+Filename   : export-checker.ts
+Path       : D:\ur-bridge-v27-final\src\compiler\module\export-checker.ts
+Pattern    : resolveOptionalTypeRef|function resolveTypeRef|export function
+             resolveTypeRef|toIRType\(
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 146
+Line       :       type: resolveOptionalTypeRef(ta.aliasedType),
+Filename   : export-checker.ts
+Path       : D:\ur-bridge-v27-final\src\compiler\module\export-checker.ts
+Pattern    : resolveOptionalTypeRef|function resolveTypeRef|export function
+             resolveTypeRef|toIRType\(
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 28
+Line       : import { TypeEnv, resolveOptionalTypeRef } from "./type-env.js";
+Filename   : checker.ts
+Path       : D:\ur-bridge-v27-final\src\compiler\typesystem\checker.ts
+Pattern    : resolveOptionalTypeRef|function resolveTypeRef|export function
+             resolveTypeRef|toIRType\(
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 50
+Line       :     // resolved via the same resolveOptionalTypeRef used everywhere else;
+Filename   : checker.ts
+Path       : D:\ur-bridge-v27-final\src\compiler\typesystem\checker.ts
+Pattern    : resolveOptionalTypeRef|function resolveTypeRef|export function
+             resolveTypeRef|toIRType\(
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 63
+Line       :         // referenced struct, which toIRType() then maps to "void",
+Filename   : checker.ts
+Path       : D:\ur-bridge-v27-final\src\compiler\typesystem\checker.ts
+Pattern    : resolveOptionalTypeRef|function resolveTypeRef|export function
+             resolveTypeRef|toIRType\(
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 65
+Line       :         type: resolveOptionalTypeRef(f.type, name => this.unknownType(name,
+             f.span), structTypes),
+Filename   : checker.ts
+Path       : D:\ur-bridge-v27-final\src\compiler\typesystem\checker.ts
+Pattern    : resolveOptionalTypeRef|function resolveTypeRef|export function
+             resolveTypeRef|toIRType\(
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 84
+Line       :       const ty = resolveOptionalTypeRef(g.type, name => this.unknownType(name,
+             g.span), this.structTypes);
+Filename   : checker.ts
+Path       : D:\ur-bridge-v27-final\src\compiler\typesystem\checker.ts
+Pattern    : resolveOptionalTypeRef|function resolveTypeRef|export function
+             resolveTypeRef|toIRType\(
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 91
+Line       :         resolveOptionalTypeRef(p.type, name => this.unknownType(name, p.span),
+             this.structTypes));
+Filename   : checker.ts
+Path       : D:\ur-bridge-v27-final\src\compiler\typesystem\checker.ts
+Pattern    : resolveOptionalTypeRef|function resolveTypeRef|export function
+             resolveTypeRef|toIRType\(
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 92
+Line       :       const retType = resolveOptionalTypeRef(fn.returnType, name =>
+             this.unknownType(name, fn.span), this.structTypes);
+Filename   : checker.ts
+Path       : D:\ur-bridge-v27-final\src\compiler\typesystem\checker.ts
+Pattern    : resolveOptionalTypeRef|function resolveTypeRef|export function
+             resolveTypeRef|toIRType\(
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 119
+Line       :     const retType = resolveOptionalTypeRef(fn.returnType, name =>
+             this.unknownType(name, fn.span), this.structTypes);
+Filename   : checker.ts
+Path       : D:\ur-bridge-v27-final\src\compiler\typesystem\checker.ts
+Pattern    : resolveOptionalTypeRef|function resolveTypeRef|export function
+             resolveTypeRef|toIRType\(
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 121
+Line       :       env.set(p.name, resolveOptionalTypeRef(p.type, name =>
+             this.unknownType(name, p.span), this.structTypes));
+Filename   : checker.ts
+Path       : D:\ur-bridge-v27-final\src\compiler\typesystem\checker.ts
+Pattern    : resolveOptionalTypeRef|function resolveTypeRef|export function
+             resolveTypeRef|toIRType\(
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 259
+Line       :     const declaredTy = resolveOptionalTypeRef(stmt.type, name =>
+             this.unknownType(name, stmt.span), this.structTypes);
+Filename   : checker.ts
+Path       : D:\ur-bridge-v27-final\src\compiler\typesystem\checker.ts
+Pattern    : resolveOptionalTypeRef|function resolveTypeRef|export function
+             resolveTypeRef|toIRType\(
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 24
+Line       : export { resolveTypeRef, resolveOptionalTypeRef, TypeEnv } from "./type-env.js";
+Filename   : index.ts
+Path       : D:\ur-bridge-v27-final\src\compiler\typesystem\index.ts
+Pattern    : resolveOptionalTypeRef|function resolveTypeRef|export function
+             resolveTypeRef|toIRType\(
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 54
+Line       : export function resolveTypeRef(
+Filename   : type-env.ts
+Path       : D:\ur-bridge-v27-final\src\compiler\typesystem\type-env.ts
+Pattern    : resolveOptionalTypeRef|function resolveTypeRef|export function
+             resolveTypeRef|toIRType\(
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 84
+Line       : function resolveTypeRefBase(
+Filename   : type-env.ts
+Path       : D:\ur-bridge-v27-final\src\compiler\typesystem\type-env.ts
+Pattern    : resolveOptionalTypeRef|function resolveTypeRef|export function
+             resolveTypeRef|toIRType\(
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 188
+Line       : export function resolveOptionalTypeRef(
+Filename   : type-env.ts
+Path       : D:\ur-bridge-v27-final\src\compiler\typesystem\type-env.ts
+Pattern    : resolveOptionalTypeRef|function resolveTypeRef|export function
+             resolveTypeRef|toIRType\(
+Context    : Microsoft.PowerShell.Commands.MatchInfoContext
+Matches    : {0}
+
+
+
+
+=== 4. ARRAY VARIABLE LOWERING ===
+  // â”€â”€ Expression lowering â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+  /** Returns the SSA value id for the lowered expression, or null if lowering failed (diagnostic already recorded). */
+  /**
+   * Single source of truth for lowering an array literal (`[1,2,3]`)
+   * into a real slot + array_store sequence. Used by BOTH
+   * `VariableDeclaration` (`let a = [1,2,3]`, where `varName` is the
+   * real, named variable) and the general `lowerExpr` case (`sum([1,2,3])`
+   * â€” a direct call argument, `varName` undefined, per ADR-004:
+   * confirmed via real AST-level evidence that both positions share
+   * the same readiness point, and the difference was a real,
+   * disclosed implementation gap, not an architectural one). Extracted
+   * per direct instruction â€” a single function, not duplicated logic.
+   *
+   * Returns `null` only on a real lowering failure (a diagnostic has
+   * already been recorded via `this.error(...)`).
+   */
+  private lowerArrayLiteral(elements: readonly Expression[], varName: string | undefined, location: SourceLocation): { ref: IRValueRef; type: URType } | null {
+    if (elements.length === 0) {
+      // Semantic/TypeChecker already reject `[]` (SE/TY6002) for a
+      // valid program; this is defense-in-depth, not a new
+      // user-facing diagnostic path.
+      this.error(CODEGEN_CODES.UNSUPPORTED_CONSTRUCT, `empty array literal is not supported`, location);
+      return null;
+    }
+    const loweredElements: Array<{ ref: IRValueRef; type: URType }> = [];
+    for (const el of elements) {
+      const lowered = this.lowerExpr(el);
+      if (!lowered) return null;
+      loweredElements.push(lowered);
+    }
+    if (loweredElements[0]!.type.kind === "Array") {
+      // v29-D4 (Gap A, Nested Literal Construction): the REAL general
+      // case â€” an element that is itself an ArrayLiteral has ALREADY
+      // lowered successfully, recursively, through this exact same
+      // function (elements are lowered via lowerExpr() above, and a
+      // nested ArrayLiteral is handled by the SAME "ArrayLiteral" case
+      // in lowerExpr â€” confirmed directly, not assumed). Its own
+      // result is already a real array reference
+      // ({id:-1, arraySlot: innerSlotId}) â€” the SAME shape already
+      // proven to flow correctly through call-argument encoding
+      // (D2's own work). Per the ratified Nested Array Reference
+      // Representation Contract, the outer array's own element type
+      // is "array_ref" (a real, distinct IR type â€” not toIRType()'d,
+      // exactly mirroring the same fix already applied to a int[][]
+      // parameter's own element type in this file), and each element
+      // is STORED as a reference (the inner array's own base address),
+      // never a copy of the inner array's own contents.
+      const elementIRType: IRType = "array_ref";
+      const slotId = this.nextSlotId++;
+      this.locals.push({ id: slotId, name: varName ?? `array_tmp_${slotId}`, type: elementIRType, length: elements.length, isArray: true });
+      for (let i = 0; i < loweredElements.length; i++) {
+        const idxId = this.freshId();
+        this.instructions.push({ kind: "const", id: idxId, type: "i64", value: { kind: "const_int", value: BigInt(i) }, location });
+        this.instructions.push({ kind: "array_store", slot: slotId, index: { id: idxId }, value: loweredElements[i]!.ref, location });
+      }
+      const arrayType = tArray(loweredElements[0]!.type);
+      if (varName !== undefined) {
+        this.varEnv.set(varName, { kind: "slot", slotId });
+        this.varTypes.set(varName, arrayType);
+      }
+      return { ref: { id: -1, arraySlot: slotId }, type: arrayType };
+    }
+    // Gate V1-MIXED-STRUCT-ARRAY-REJECTION: a struct-typed array
+    // element whose own real layout mixes scalar and reference
+    // fields must be rejected here, with a real diagnostic â€” BEFORE
+    // any IRLocalSlot is created for this array â€” per the already-
+    // frozen Array<Struct> Language Contract (Gate R1.5-CGEN-002's
+    // own Point 3). This does not affect homogeneous-scalar or
+    // homogeneous-reference struct elements at all.
+    if (loweredElements[0]!.type.kind === "Struct") {
+      const layout = this.structLayouts.get(loweredElements[0]!.type.name);
+      if (layout && !this.isStructArrayElementHomogeneous(layout)) {
+        this.rejectMixedStructArrayElement(loweredElements[0]!.type.name, location);
+        return null;
+      }
+    }
+    const elementIRType = toIRType(loweredElements[0]!.type);
+    const slotId = this.nextSlotId++;
+    this.locals.push({ id: slotId, name: varName ?? `array_tmp_${slotId}`, type: elementIRType, length: elements.length, isArray: true });
+    for (let i = 0; i < loweredElements.length; i++) {
+      const idxId = this.freshId();
+      this.instructions.push({ kind: "const", id: idxId, type: "i64", value: { kind: "const_int", value: BigInt(i) }, location });
+      this.instructions.push({ kind: "array_store", slot: slotId, index: { id: idxId }, value: loweredElements[i]!.ref, location });
+    }
+    const arrayType = tArray(loweredElements[0]!.type);
+    if (varName !== undefined) {
+      this.varEnv.set(varName, { kind: "slot", slotId });
+      this.varTypes.set(varName, arrayType);
+    }
+    return { ref: { id: -1, arraySlot: slotId }, type: arrayType };
+  }
+
+  private lowerExpr(expr: Expression): { ref: IRValueRef; type: URType } | null {
+    const location = this.loc(expr.span);
+
+    switch (expr.kind) {
+      case "ArrayLiteral": {
+        // General expression position (e.g. `sum([1,2,3])`, a direct
+        // call argument) - routed through the SAME single, shared
+        // structLayout object as `p`'s slot â€” the layout is immutable,
+        // structural data, safe to share) and copies every field via
+        // real field_load+field_store pairs â€” a real, minimal
+        // (exactly N loads + N stores for N fields), fully independent
+        // duplication. No aliasing is possible afterward, since `q`'s
+        // own slot is entirely separate storage from `p`'s.
+        if (stmt.initializer.kind === "Identifier" && this.structVarSlot.has(stmt.initializer.name)) {
+          const source = this.structVarSlot.get(stmt.initializer.name)!;
+          const sourceType = this.varTypes.get(stmt.initializer.name);
+          const newSlotId = this.nextSlotId++;
+          this.locals.push({ id: newSlotId, name: stmt.name, type: "void", structLayout: source.layout });
+          for (let i = 0; i < source.layout.fields.length; i++) {
+            const loadId = this.freshId();
+            this.instructions.push({ kind: "field_load", id: loadId, type: source.layout.fields[i]!.type, slot: source.slotId, fieldIndex: i, location });
+            this.instructions.push({ kind: "field_store", slot: newSlotId, fieldIndex: i, value: { id: loadId }, location });
+          }
+          this.structVarSlot.set(stmt.name, { slotId: newSlotId, layout: source.layout });
+          if (sourceType) this.varTypes.set(stmt.name, sourceType);
+          return "continue";
+        }
+        // Stage 3B Remediation (per direct instruction, Option A):
+        // `let t0 = arr[i]` where `arr` is a known array of structs.
+        // Narrowly scoped to exactly this shape - IndexExpression on a
+        // known array-of-struct variable - not any other Composite
+        // Value path. Loads the indexed element via the array's own
+        // existing arraySlot (array_load is already proven correct for
+        // struct elements, per A1's own Localization Gate), stores that
+        // real struct value into a fresh, compiler-synthesized struct
+        // slot, then registers structVarSlot exactly as the three
+        // branches above already do for their own initializer shapes.
+        if (stmt.initializer.kind === "IndexExpression" && stmt.initializer.object.kind === "Identifier") {
+          const arrBinding = this.varEnv.get(stmt.initializer.object.name);
+          const elementType = this.varTypes.get(stmt.initializer.object.name);
+          if (arrBinding?.kind === "slot" && elementType?.kind === "Array" && elementType.element.kind === "Struct") {
+            const layout = this.structLayouts.get(elementType.element.name);
+            if (layout) {
+              const idx = this.lowerExpr(stmt.initializer.index);
+              if (!idx) return "failed";
+              const elemId = this.freshId();
+              this.instructions.push({ kind: "array_load", id: elemId, type: "void", slot: arrBinding.slotId, index: idx.ref, location });
+              const newSlotId = this.nextSlotId++;
+              this.locals.push({ id: newSlotId, name: stmt.name, type: "void", structLayout: layout });
+              this.instructions.push({ kind: "store", slot: newSlotId, value: { id: elemId }, location });
+              this.structVarSlot.set(stmt.name, { slotId: newSlotId, layout });
+              this.varTypes.set(stmt.name, elementType.element);
+              return "continue";
+            }
+          }
+        }
+        // Level 2.8, LANGUAGE_SYNTAX_1_1_SPEC.md آ§1: an array literal
+        // initializer always creates a NEW array slot directly â€” arrays
+        // are ALWAYS slot-backed (never plain SSA), since one SSA id
+        // cannot represent multiple elements. This is a distinct path
+        // from the generic lowerExpr()+assignVar() used for scalars.
+        if (stmt.initializer.kind === "ArrayLiteral") {
+          const result = this.lowerArrayLiteral(stmt.initializer.elements, stmt.name, location);
+          if (!result) return "failed";
+          return "continue";
+        }
+        const lowered = this.lowerExpr(stmt.initializer);
+        if (!lowered) return "failed";
+        if (lowered.ref.arraySlot !== undefined) {
+          this.varEnv.set(stmt.name, { kind: "slot", slotId: lowered.ref.arraySlot });
+          this.varTypes.set(stmt.name, lowered.type);
+          return "continue";
+        }
+        this.assignVar(stmt.name, lowered, location);
+        return "continue";
+      }
+      case "Assignment": {
+        if (stmt.target.kind === "MemberExpression") {
+          // Level 2.8, LANGUAGE_SYNTAX_1_1_SPEC.md آ§2.2/آ§2.3: `p.x = value`
+          // field assignment â€” a store into that field's OWN slot, never
+          // touching any other struct variable's fields (matches value-
+          // copy semantics: `q = p` already gave `q` fully independent
+
+=== 5. LOWERING ENTRY POINT ===
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// UR â€” Compiler Pipeline: AST â†’ IR Lowering
+// Level 2 â€” Phase 2.2
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+//
+//   UR Source â†’ Lexer â†’ Parser â†’ AST â†’ Semantic â†’ Type Checker â†’ IR
+//                                                                  ^^^^ HERE
+//
+// PRECONDITION: the caller MUST have already run the Program through
+// analyze() (Semantic) and typeCheck() (Type Checker) with ZERO error
+// diagnostics before calling lowerToIR(). This pass does not re-validate
+// semantic correctness â€” it assumes a well-formed, well-typed program and
+// focuses purely on IR construction. Passing an invalid program produces
+// undefined lowering behavior (most likely a CG9001 internal-error
+// diagnostic from a failed lookup, not a crash â€” but correctness is only
+// guaranteed for programs that already passed Semantic + TypeChecker).
+//
+// SCOPE (per approved Level 2 execution plan â€” do not expand without a new
+// approved phase): variable declarations, assignment to a plain identifier,
+// arithmetic/comparison/logical binary and unary expressions, function
+// calls, return statements. Any other statement or expression kind
+// (if/while/for/break/continue/switch/try-catch, struct/array literals,
+// member/index expressions as assignment targets, imports) produces a
+// CG1001 UNSUPPORTED_CONSTRUCT diagnostic â€” this pass never silently
+// mishandles a construct it doesn't support.
+//
+// This pass reuses TypeSystem's own exported, stable functions
+// (binaryOpResultType, unaryOpResultType, resolveTypeRef) rather than
+// re-deriving type rules â€” per the Level 2 rule against modifying Type
+// System, nothing in typesystem/*.ts is changed; this file only consumes
+// its public API.
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+import type {
+  Program, FunctionDecl, Statement, Expression, BlockStatement,
+} from "../frontend/ast.js";
+import { resolveTypeRef } from "../typesystem/type-env.js";
+import { binaryOpResultType, unaryOpResultType } from "../typesystem/compatibility.js";
+import { T_INT, T_FLOAT, T_BOOL, T_STRING, T_CHAR, T_UNKNOWN, tArray, tStruct, type URType } from "../typesystem/types.js";
+import type {
+  IRModule, IRFunction, IRBasicBlock, IRInstruction, IRTerminator,
+  IRType, IRValueRef, IRBinOp, IRUnOp, IRLocalSlot, ExternSymbol, StructLayoutResult,
+} from "../../shared/ir.js";
+import { computeStructLayout, StructLayoutRejectionError } from "../typesystem/struct-layout-calculator.js";
+import { lookupNativeLibrary, lookupNativeFunction } from "../semantic/native-library-registry.js";
+import { fromAstSpan, type SourceLocation } from "../../shared/locations.js";
+import { qualifiedName as makeQualifiedName } from "../../shared/symbols.js";
+import { makeDiagnostic, CODEGEN_CODES, type SharedDiagnostic } from "../../shared/diagnostics.js";
+import { buildOk, buildFail, type BuildResult } from "../../shared/build.js";
+import { RUNTIME_CORE_EXTERNS, resolveBuiltinExtern } from "../../shared/runtime-table.js";
+import { lookupBuiltin } from "../semantic/builtins-registry.js";
+
+// â”€â”€ URType â†’ IRType mapping â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+// toIRType/collectAssignedNames/collectAssignedNamesInIf moved to
+// lower-to-ir-helpers.ts, and IRBuilder moved to ir-builder.ts
+// (Architecture Freeze Audit) - pure separation, zero behavioral change.
+import { toIRType, collectAssignedNames, collectAssignedNamesInIf, type FnSignature } from "./lower-to-ir-helpers.js";
+import { IRBuilder } from "./ir-builder.js";
+
+export function lowerToIR(program: Program, file: string, moduleName: string, externalStructTypes?: ReadonlyMap<string, URType>, externalStructLayouts?: ReadonlyMap<string, StructLayoutResult>, externalFunctions?: ReadonlyMap<string, { runtime: "python" | "javascript" | "c" | "rust" | "cpp" | "wasm" | "go" | "java" | "typescript" | "native"; module: string; symbol: string; rawArgs?: string; manifestBaseDir?: string }>): BuildResult<IRModule> {
+  const allDiagnostics: SharedDiagnostic[] = [];
+
+  // Real cross-module wiring (mirrors the same, already-established
+  // pattern used for analyze()'s externalFunctionNames and
+  // typeCheck()'s externalStructTypes) â€” local struct URTypes, merged
+  // with any imported struct types the caller supplies, consulted by
+  // every resolveTypeRef() call below so a struct-typed parameter
+  // whose struct is declared in ANOTHER module still resolves
+  // correctly here, not just in Semantic/TypeChecker.
+  const localStructUrTypes = new Map<string, URType>();
+  for (const s of program.structs) {
+    localStructUrTypes.set(s.name, tStruct(s.name, s.fields.map(f => ({ name: f.name, type: resolveTypeRef(f.type) }))));
+  }
+  const knownStructUrTypes = new Map<string, URType>(externalStructTypes ?? []);
+  for (const [name, ty] of localStructUrTypes) knownStructUrTypes.set(name, ty);
+
+  // Build the function-signature table (qualified name, return/param URTypes)
+  // up front, so calls to any function in the module resolve regardless of
+  // declaration order â€” matching the Frontend's own forward-declaration
+  // semantics (Semantic Analyzer already validated this).
+  const functionSignatures = new Map<string, FnSignature>();
+  for (const fn of program.functions) {
+    const returnType = fn.returnType ? resolveTypeRef(fn.returnType, undefined, knownStructUrTypes) : T_UNKNOWN;
+    const paramTypes = fn.params.map(p => p.type ? resolveTypeRef(p.type, undefined, knownStructUrTypes) : T_UNKNOWN);
+    functionSignatures.set(fn.name, {
+      qualifiedName: makeQualifiedName({ name: fn.name, kind: "function", location: fromAstSpan(file, fn.span), module: moduleName }),
+      returnType,
+      paramTypes,
+    });
+  }
+
+  // Struct layout registry (Level 2.8, revised per STRUCT_MEMORY_LAYOUT.md
+  // آ§9's binding single-source-of-truth requirement) â€” built once via the
+  // single, shared StructLayoutCalculator, shared read-only across all
+  // functions, mirroring functionSignatures above. This REPLACES the
+  // prior structFields (a plain URType list with no offset/size info) â€”
+  // the Calculator is now the only place that computes field positions.
+  //
+  // Gate R1.5: a preliminary, name-only stub map of EVERY struct in the
+  // program (empty `fields` â€” not yet resolved, and not needed here:
+  // the loop below only ever consults `fieldType.kind === "Struct"` and
+  // `fieldType.name` to look up `structLayouts`, never the stub's own
+  // `fields`) is built BEFORE the main loop, precisely so resolveTypeRef
+  // can recognize ANY struct-typed field reference regardless of
+  // processing order â€” including a struct referencing itself, where an
+  // INCREMENTALLY-built map (adding one entry per loop iteration, as
+  // checker.ts's own separate hoisting pass does) would still be missing
+  // the current struct's own name at the exact moment its own fields are
+  // being resolved. This is the proven root cause (Gate R1.4, corrected
+  // location) â€” resolveTypeRef() previously received no struct-name map
+  // at this exact call site, causing an Error-kind URType, which
+  // toIRType() then mapped to "void", producing the "field has type
+  // 'void'" crash for every struct-typed field.
+  const structNameStubs = new Map<string, URType>(
+    program.structs.map(s => [s.name, tStruct(s.name, [])]),
+  );
+  // Gate R1.5 (Implementation): structLayouts is now computed LAZILY
+  // and MEMOIZED, keyed by dependency order (which struct references
+  // which), NOT by declaration order â€” proven necessary and correct
+  // via an isolated prototype (Gate R1.5's own Discovery+Design) before
+  // this exact implementation. A struct referencing a LATER-declared
+  // struct, or referencing itself, previously failed because
+  // structLayouts.get(name) returned undefined at the exact moment it
+  // was needed (declaration-order, single-pass building) â€” this had
+  // NOTHING to do with toIRType() or struct-layout-calculator.ts, both
+  // of which remain untouched, and the type:"void"+nestedLayout pattern
+  // below is byte-identical to before; only the ORDER/TIMING of when
+  // each struct's own layout gets computed has changed.
+  const declsByName = new Map(program.structs.map(s => [s.name, s]));
+  const structLayouts = new Map<string, StructLayoutResult>();
+  const inProgress = new Set<string>();
+
+  function getOrComputeStructLayout(name: string): StructLayoutResult | undefined {
+    if (structLayouts.has(name)) return structLayouts.get(name);
+    const decl = declsByName.get(name);
+    if (!decl) return undefined; // not a real struct name â€” resolveTypeRef's
+                                  // own unknown-type diagnostic already covers this
+    if (inProgress.has(name)) {
+      // Cycle detected â€” a struct that (directly or transitively)
+      // contains itself BY VALUE has no finite size. This is a real,
+      // explicit, diagnosable rejection (Gate R1.5's own Discovery:
+      // Layout must cleanly reject this, not attempt a placeholder) â€”
+      // NOT the "field has type 'void'" internal-error crash this
+      // Gate's own work replaces.
+      throw new StructLayoutRejectionError(
+        `struct '${name}' is recursive by value (directly or indirectly contains itself) â€” ` +
+        `this requires a reference/pointer-based representation, which is not supported`,
+      );
+    }
+**********************
+Windows PowerShell transcript end
+End time: 20261024223640
+**********************

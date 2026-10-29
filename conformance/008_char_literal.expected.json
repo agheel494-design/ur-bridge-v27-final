@@ -1,0 +1,17 @@
+{
+  "name": "008_char_literal",
+  "parseDiagnostics": [],
+  "typecheckDiagnostics": [],
+  "lowerOk": true,
+  "lowerDiagnostics": [],
+  "irSummary": {
+    "functionCount": 1,
+    "instructionKindCounts": {
+      "const": 2
+    }
+  },
+  "cCompiles": true,
+  "cRuntimeExitCode": 1,
+  "wasmAccepted": true,
+  "wasmRuntimeResult": "1"
+}

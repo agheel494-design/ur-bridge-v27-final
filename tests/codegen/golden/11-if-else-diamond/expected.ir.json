@@ -1,0 +1,384 @@
+{
+  "moduleName": "11-if-else-diamond",
+  "functions": [
+    {
+      "qualifiedName": "ur_11_if_else_diamond_main",
+      "sourceName": "main",
+      "params": [],
+      "returnType": "i64",
+      "blocks": [
+        {
+          "id": 0,
+          "label": "entry",
+          "instructions": [
+            {
+              "kind": "const",
+              "id": 0,
+              "type": "i64",
+              "value": {
+                "kind": "const_int",
+                "value": "0n"
+              },
+              "location": {
+                "file": "program.ur",
+                "start": {
+                  "line": 2,
+                  "column": 11
+                },
+                "end": {
+                  "line": 2,
+                  "column": 11
+                }
+              }
+            },
+            {
+              "kind": "const",
+              "id": 1,
+              "type": "i64",
+              "value": {
+                "kind": "const_int",
+                "value": "0n"
+              },
+              "location": {
+                "file": "program.ur",
+                "start": {
+                  "line": 3,
+                  "column": 11
+                },
+                "end": {
+                  "line": 3,
+                  "column": 11
+                }
+              }
+            },
+            {
+              "kind": "binop",
+              "id": 2,
+              "type": "bool",
+              "op": "eq",
+              "left": {
+                "id": 0
+              },
+              "right": {
+                "id": 1
+              },
+              "location": {
+                "file": "program.ur",
+                "start": {
+                  "line": 3,
+                  "column": 6
+                },
+                "end": {
+                  "line": 3,
+                  "column": 11
+                }
+              }
+            },
+            {
+              "kind": "store",
+              "slot": 0,
+              "value": {
+                "id": 0
+              },
+              "location": {
+                "file": "program.ur",
+                "start": {
+                  "line": 3,
+                  "column": 3
+                },
+                "end": {
+                  "line": 7,
+                  "column": 5
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "kind": "cond_branch",
+            "condition": {
+              "id": 2
+            },
+            "thenTarget": 1,
+            "elseTarget": 2,
+            "location": {
+              "file": "program.ur",
+              "start": {
+                "line": 3,
+                "column": 3
+              },
+              "end": {
+                "line": 7,
+                "column": 5
+              }
+            }
+          }
+        },
+        {
+          "id": 1,
+          "label": "then",
+          "instructions": [
+            {
+              "kind": "const",
+              "id": 3,
+              "type": "i64",
+              "value": {
+                "kind": "const_int",
+                "value": "1n"
+              },
+              "location": {
+                "file": "program.ur",
+                "start": {
+                  "line": 4,
+                  "column": 9
+                },
+                "end": {
+                  "line": 4,
+                  "column": 9
+                }
+              }
+            },
+            {
+              "kind": "store",
+              "slot": 0,
+              "value": {
+                "id": 3
+              },
+              "location": {
+                "file": "program.ur",
+                "start": {
+                  "line": 4,
+                  "column": 5
+                },
+                "end": {
+                  "line": 4,
+                  "column": 9
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "kind": "branch",
+            "target": 3,
+            "location": {
+              "file": "program.ur",
+              "start": {
+                "line": 3,
+                "column": 3
+              },
+              "end": {
+                "line": 7,
+                "column": 5
+              }
+            }
+          }
+        },
+        {
+          "id": 2,
+          "label": "else",
+          "instructions": [
+            {
+              "kind": "const",
+              "id": 4,
+              "type": "i64",
+              "value": {
+                "kind": "const_int",
+                "value": "2n"
+              },
+              "location": {
+                "file": "program.ur",
+                "start": {
+                  "line": 6,
+                  "column": 9
+                },
+                "end": {
+                  "line": 6,
+                  "column": 9
+                }
+              }
+            },
+            {
+              "kind": "store",
+              "slot": 0,
+              "value": {
+                "id": 4
+              },
+              "location": {
+                "file": "program.ur",
+                "start": {
+                  "line": 6,
+                  "column": 5
+                },
+                "end": {
+                  "line": 6,
+                  "column": 9
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "kind": "branch",
+            "target": 3,
+            "location": {
+              "file": "program.ur",
+              "start": {
+                "line": 3,
+                "column": 3
+              },
+              "end": {
+                "line": 7,
+                "column": 5
+              }
+            }
+          }
+        },
+        {
+          "id": 3,
+          "label": "merge",
+          "instructions": [
+            {
+              "kind": "load",
+              "id": 5,
+              "type": "i64",
+              "slot": 0,
+              "location": {
+                "file": "program.ur",
+                "start": {
+                  "line": 8,
+                  "column": 10
+                },
+                "end": {
+                  "line": 8,
+                  "column": 10
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "kind": "return",
+            "value": {
+              "id": 5
+            },
+            "location": {
+              "file": "program.ur",
+              "start": {
+                "line": 8,
+                "column": 3
+              },
+              "end": {
+                "line": 8,
+                "column": 10
+              }
+            }
+          }
+        }
+      ],
+      "entryBlock": 0,
+      "location": {
+        "file": "program.ur",
+        "start": {
+          "line": 1,
+          "column": 1
+        },
+        "end": {
+          "line": 9,
+          "column": 3
+        }
+      },
+      "locals": [
+        {
+          "id": 0,
+          "name": "y",
+          "type": "i64"
+        }
+      ]
+    }
+  ],
+  "externs": [
+    {
+      "name": "ur_runtime_init",
+      "returnType": "void",
+      "parameterTypes": [
+        "i64"
+      ],
+      "callingConvention": "c",
+      "kind": "runtime",
+      "lifecycleRole": "init"
+    },
+    {
+      "name": "ur_runtime_shutdown",
+      "returnType": "void",
+      "parameterTypes": [],
+      "callingConvention": "c",
+      "kind": "runtime",
+      "lifecycleRole": "shutdown"
+    },
+    {
+      "name": "ur_print_int",
+      "returnType": "void",
+      "parameterTypes": [
+        "i64"
+      ],
+      "callingConvention": "c",
+      "kind": "runtime",
+      "lifecycleRole": "none"
+    },
+    {
+      "name": "ur_print_float",
+      "returnType": "void",
+      "parameterTypes": [
+        "f64"
+      ],
+      "callingConvention": "c",
+      "kind": "runtime",
+      "lifecycleRole": "none"
+    },
+    {
+      "name": "ur_print_bool",
+      "returnType": "void",
+      "parameterTypes": [
+        "bool"
+      ],
+      "callingConvention": "c",
+      "kind": "runtime",
+      "lifecycleRole": "none"
+    },
+    {
+      "name": "ur_print_string",
+      "returnType": "void",
+      "parameterTypes": [
+        "string"
+      ],
+      "callingConvention": "c",
+      "kind": "runtime",
+      "lifecycleRole": "none"
+    },
+    {
+      "name": "ur_input_string",
+      "returnType": "string",
+      "parameterTypes": [],
+      "callingConvention": "c",
+      "kind": "runtime",
+      "lifecycleRole": "none"
+    },
+    {
+      "name": "ur_free",
+      "returnType": "void",
+      "parameterTypes": [
+        "string"
+      ],
+      "callingConvention": "c",
+      "kind": "runtime",
+      "lifecycleRole": "none"
+    },
+    {
+      "name": "ur_panic",
+      "returnType": "void",
+      "parameterTypes": [
+        "string"
+      ],
+      "callingConvention": "c",
+      "kind": "runtime",
+      "lifecycleRole": "none"
+    }
+  ]
+}

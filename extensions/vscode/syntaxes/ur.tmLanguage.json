@@ -1,0 +1,127 @@
+{
+  "//": "GENERATED FILE - DO NOT EDIT BY HAND. Regenerate via tools/grammar/generate-grammar.ts. Any manual edit will be overwritten and will silently diverge from src/compiler/localization/ - the single source of truth.",
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "UR",
+  "scopeName": "source.ur",
+  "x-ur-generator-metadata": {
+    "generatedFrom": "tools/grammar/keyword-contract.generated.json",
+    "contractSha256": "3f00a2a0f90ab846c2aaedee3f59bbe348dcc3ab3201d78d39a7b2f8b884f84e",
+    "generatorScript": "tools/grammar/generate-grammar.ts"
+  },
+  "patterns": [
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#numbers"
+    },
+    {
+      "include": "#keywords"
+    },
+    {
+      "include": "#in-contextual"
+    },
+    {
+      "include": "#operators"
+    },
+    {
+      "include": "#identifiers"
+    }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.ur",
+          "match": "//.*$"
+        },
+        {
+          "name": "comment.block.ur",
+          "begin": "/\\*",
+          "end": "\\*/"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.ur",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.ur",
+              "match": "\\\\."
+            }
+          ]
+        },
+        {
+          "name": "string.quoted.single.ur",
+          "begin": "'",
+          "end": "'",
+          "patterns": [
+            {
+              "name": "constant.character.escape.ur",
+              "match": "\\\\."
+            }
+          ]
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.ur",
+          "match": "\\d+(\\.\\d+)?"
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.ur",
+          "match": "(?<![A-Za-z0-9_\\u0621-\\u063A\\u0641-\\u064A\\u066E-\\u06FF\\u0750-\\u077F\\uFB50-\\uFDFF\\uFE70-\\uFEFF\\u00C0-\\u024F\\u0370-\\u03FF\\u0400-\\u04FF\\u4E00-\\u9FFF\\u0900-\\u0963\\u0966-\\u096F\\u0971-\\u097F\\u3040-\\u30FF\\u064B-\\u065F\\u0670])(zurueckgeben|продолжить|retourner|continuer|continuar|abbrechen|function|continue|fonction|retornar|mientras|funktion|waehrend|прервать|retornar|enquanto|continue|प्रत्येक|tantque|arreter|funcion|функция|вернуть|return|romper|weiter|funcao|समाप्त|अन्यथा|نهاية|بينما|طالما|while|break|sinon|sonst|конец|иначе|senao|कार्य|دالة|أرجع|وإلا|اكسر|تابع|func|else|pour|sino|para|ende|wenn|fuer|繰り返す|если|пока|para|pare|वापस|जबतक|जारी|إذا|لكل|end|for|fin|fin|違えば|ながら|для|fim|अगर|रोक|if|si|si|関数|返す|終了|もし|中断|続行|函数|返回|结束|如果|否则|对于|中断|继续|se|当)(?![A-Za-z0-9_\\u0621-\\u063A\\u0641-\\u064A\\u066E-\\u06FF\\u0750-\\u077F\\uFB50-\\uFDFF\\uFE70-\\uFEFF\\u00C0-\\u024F\\u0370-\\u03FF\\u0400-\\u04FF\\u4E00-\\u9FFF\\u0900-\\u0963\\u0966-\\u096F\\u0971-\\u097F\\u3040-\\u30FF\\u064B-\\u065F\\u0670])"
+        },
+        {
+          "name": "keyword.other.ur",
+          "match": "(?<![A-Za-z0-9_\\u0621-\\u063A\\u0641-\\u064A\\u066E-\\u06FF\\u0750-\\u077F\\uFB50-\\uFDFF\\uFE70-\\uFEFF\\u00C0-\\u024F\\u0370-\\u03FF\\u0400-\\u04FF\\u4E00-\\u9FFF\\u0900-\\u0963\\u0966-\\u096F\\u0971-\\u097F\\u3040-\\u30FF\\u064B-\\u065F\\u0670])(importieren|estructura|structure|структура|estrutura|importer|importar|struktur|importar|استورد|struct|import|импорт|प्रकार|संरचना|インポート|пусть|بنية|type|soit|type|tipo|seja|tipo|आयात|عرف|نوع|let|var|sea|sei|typ|レット|構造体|тип|मान|دع|类型|结构|导入|型|设)(?![A-Za-z0-9_\\u0621-\\u063A\\u0641-\\u064A\\u066E-\\u06FF\\u0750-\\u077F\\uFB50-\\uFDFF\\uFE70-\\uFEFF\\u00C0-\\u024F\\u0370-\\u03FF\\u0400-\\u04FF\\u4E00-\\u9FFF\\u0900-\\u0963\\u0966-\\u096F\\u0971-\\u097F\\u3040-\\u30FF\\u064B-\\u065F\\u0670])"
+        },
+        {
+          "name": "constant.language.ur",
+          "match": "(?<![A-Za-z0-9_\\u0621-\\u063A\\u0641-\\u064A\\u066E-\\u06FF\\u0750-\\u077F\\uFB50-\\uFDFF\\uFE70-\\uFEFF\\u00C0-\\u024F\\u0370-\\u03FF\\u0400-\\u04FF\\u4E00-\\u9FFF\\u0900-\\u0963\\u0966-\\u096F\\u0971-\\u097F\\u3040-\\u30FF\\u064B-\\u065F\\u0670])(verdadeiro|verdadero|falsch|истина|لاشيء|false|falso|falso|असत्य|शून्य|صحيح|true|null|vrai|faux|nulo|wahr|null|ложь|нуль|nulo|सत्य|خطأ|nul|真|偽|無|真|假|空)(?![A-Za-z0-9_\\u0621-\\u063A\\u0641-\\u064A\\u066E-\\u06FF\\u0750-\\u077F\\uFB50-\\uFDFF\\uFE70-\\uFEFF\\u00C0-\\u024F\\u0370-\\u03FF\\u0400-\\u04FF\\u4E00-\\u9FFF\\u0900-\\u0963\\u0966-\\u096F\\u0971-\\u097F\\u3040-\\u30FF\\u064B-\\u065F\\u0670])"
+        }
+      ]
+    },
+    "in-contextual": {
+      "patterns": [
+        {
+          "name": "keyword.other.contextual.ur",
+          "match": "(?<![A-Za-z0-9_\\u0621-\\u063A\\u0641-\\u064A\\u066E-\\u06FF\\u0750-\\u077F\\uFB50-\\uFDFF\\uFE70-\\uFEFF\\u00C0-\\u024F\\u0370-\\u03FF\\u0400-\\u04FF\\u4E00-\\u9FFF\\u0900-\\u0963\\u0966-\\u096F\\u0971-\\u097F\\u3040-\\u30FF\\u064B-\\u065F\\u0670])(dans|में|في|in|en|in|em|内|в|在)(?![A-Za-z0-9_\\u0621-\\u063A\\u0641-\\u064A\\u066E-\\u06FF\\u0750-\\u077F\\uFB50-\\uFDFF\\uFE70-\\uFEFF\\u00C0-\\u024F\\u0370-\\u03FF\\u0400-\\u04FF\\u4E00-\\u9FFF\\u0900-\\u0963\\u0966-\\u096F\\u0971-\\u097F\\u3040-\\u30FF\\u064B-\\u065F\\u0670])"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.ur",
+          "match": "==|!=|<=|>=|&&|\\|\\||[+\\-*/%=<>!]"
+        },
+        {
+          "name": "punctuation.separator.ur",
+          "match": "[,\\u060C]"
+        }
+      ]
+    },
+    "identifiers": {
+      "patterns": [
+        {
+          "name": "variable.other.ur",
+          "match": "[A-Za-z_\\u0621-\\u063A\\u0641-\\u064A\\u066E-\\u06FF\\u0750-\\u077F\\uFB50-\\uFDFF\\uFE70-\\uFEFF\\u00C0-\\u024F\\u0370-\\u03FF\\u0400-\\u04FF\\u4E00-\\u9FFF\\u0900-\\u0961\\u0971-\\u097F\\u3040-\\u30FF][A-Za-z0-9_\\u0621-\\u063A\\u0641-\\u064A\\u066E-\\u06FF\\u0750-\\u077F\\uFB50-\\uFDFF\\uFE70-\\uFEFF\\u00C0-\\u024F\\u0370-\\u03FF\\u0400-\\u04FF\\u4E00-\\u9FFF\\u0900-\\u0963\\u0966-\\u096F\\u0971-\\u097F\\u3040-\\u30FF\\u064B-\\u065F\\u0670]*"
+        }
+      ]
+    }
+  }
+}

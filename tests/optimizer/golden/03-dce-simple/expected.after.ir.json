@@ -1,0 +1,64 @@
+{
+  "qualifiedName": "ur_03_dce_simple_main",
+  "sourceName": "main",
+  "params": [],
+  "returnType": "i64",
+  "blocks": [
+    {
+      "id": 0,
+      "label": "entry",
+      "instructions": [
+        {
+          "kind": "const",
+          "id": 3,
+          "type": "i64",
+          "value": {
+            "kind": "const_int",
+            "value": "5n"
+          },
+          "location": {
+            "file": "program.ur",
+            "start": {
+              "line": 3,
+              "column": 10
+            },
+            "end": {
+              "line": 3,
+              "column": 10
+            }
+          }
+        }
+      ],
+      "terminator": {
+        "kind": "return",
+        "value": {
+          "id": 3
+        },
+        "location": {
+          "file": "program.ur",
+          "start": {
+            "line": 3,
+            "column": 3
+          },
+          "end": {
+            "line": 3,
+            "column": 10
+          }
+        }
+      }
+    }
+  ],
+  "entryBlock": 0,
+  "location": {
+    "file": "program.ur",
+    "start": {
+      "line": 1,
+      "column": 1
+    },
+    "end": {
+      "line": 4,
+      "column": 3
+    }
+  },
+  "locals": []
+}

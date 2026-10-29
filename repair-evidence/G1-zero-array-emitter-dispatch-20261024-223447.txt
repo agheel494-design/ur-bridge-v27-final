@@ -1,0 +1,504 @@
+﻿**********************
+Windows PowerShell transcript start
+Start time: 20261024223447
+Username: عقيل\عقيل
+RunAs User: عقيل\عقيل
+Configuration Name: 
+Machine: عقيل (Microsoft Windows NT 10.0.19045.0)
+Host Application: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe
+Process ID: 12412
+PSVersion: 5.1.19041.7802
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.19041.7802
+BuildVersion: 10.0.19041.7802
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+
+=== 1. WASM FUNCTION BODY DISPATCH ===
+  // encoder function) to materialize an array index's VALUE exactly once.
+  // Kept at its own original position (immediately after scalars) so
+  // getIndexScratchLocalIndex()'s own independent computation is
+  // unaffected by the NEW materialized-SSA scratch block added below it.
+  //
+  // V29-D2: an array-typed PARAMETER also indexes via array_load/
+  // array_store (arr[i]) and needs this same scratch local - included
+  // here via isArrayParam, not just arraySlots.length (which only
+  // counts freshly-allocated literal-array locals, per fix B's own
+  // design: a parameter needs no NEW base-address local, but DOES
+  // still need the shared index-materialization scratch).
+  const hasAnyArrayAccess = arraySlots.length > 0 || fn.locals.some(l => l.isArrayParam === true);
+  const arrayIndexScratchCount = hasAnyArrayAccess ? 1 : 0;
+  // FIX (per issues/wasm-loop-local-let-affecting-outer-state.md,
+  // PATCH_DESIGN_WASM_SSA.md, Stage 4): one dedicated scratch local per
+  // i64-typed "leaf" SSA instruction (const/load/binop) that appears as
+  // a top-level entry in any block's own instructions â€” materialized
+  // exactly once, at its own position in the instruction stream, so a
+  // later `store` referencing it (even after an intervening store to
+  // one of its own dependencies) reads the materialized value, not a
+  // lazily-re-derived one. Placed AFTER the array-index scratch (not
+  // before it) so getIndexScratchLocalIndex()'s own, separately-computed
+  // index is unaffected by this new block's size. Count recomputed via
+  // getMaterializedIds() (matching this file's own established
+  // self-recomputation convention) rather than duplicated inline.
+  //
+  // V2-MU: getMaterializedIds() now also returns string- and
+  // f64-range materialized ids (see STRING_MATERIALIZED_BASE/
+  // F64_MATERIALIZED_BASE) - .size alone would incorrectly count
+  // those toward the i64 group's own declared size (they get their
+  // own, separate i32/f64 groups below). Filtered to i64-range only,
+  // matching resolveMaterializedLocalIndex()'s own identical filter
+  // exactly - this MUST stay in sync with that function.
+  const materializedScratchCount = [...getMaterializedIds(fn).values()].filter(v => v < STRING_MATERIALIZED_BASE).length;
+  const i64LocalCount = paramCount + scalarSlots.length + arrayIndexScratchCount + materializedScratchCount;
+  const arrayBaseLocalIndexBySlotId = new Map(arraySlots.map((l, i) => [l.id, i64LocalCount + i] as const));
+  // V29-D2 (fix B/آ§3): an array-typed PARAMETER's own base address is
+  // its own already-existing WASM parameter local - NOT a new entry
+  // in the same freshly-bump-allocated pool `arraySlots` above feeds.
+  // Its own WASM local index equals its own POSITION in fn.params
+  // (matching WASM's native parameter-local convention) - found by
+  // NAME, not by slot id (v29-D2-RD's own direct, empirical finding:
+  // slot ids and parameter positions are different numbering schemes
+  // entirely; fn.locals has no entry at all for scalar parameters,
+  // so slot id 0 does not generally mean "parameter 0").
+  for (const local of fn.locals) {
+    if (local.isArrayParam !== true) continue;
+    const paramIndex = fn.params.findIndex(p => p.name === local.name);
+    if (paramIndex === -1) {
+      throw new WasmUnsupportedError({ code: WASM_CODES.UNSUPPORTED_INSTRUCTION, functionName: fn.sourceName, message: `internal error: array-param local '${local.name}' (slot ${local.id}) has no matching entry in fn.params` });
+    }
+    arrayBaseLocalIndexBySlotId.set(local.id, paramIndex);
+  }
+  // Struct support, Phase 1 (per WASM_BUMP_ALLOCATOR_STUDY.md آ§4, point
+  // 2): one i32 WASM local per struct slot, indices continuing right
+  // after arrays' own indices - the exact same treatment
+  // arrayBaseLocalIndexBySlotId already gets, mirrored precisely.
+  const structSlots = fn.locals.filter(l => l.structLayout !== undefined);
+  const structBaseLocalIndexBySlotId = new Map(structSlots.map((l, i) => [l.id, i64LocalCount + arraySlots.length + i] as const));
+  // V2-M2 (Design approved, narrow scope): one i32 WASM local per
+  // string-typed slot, indices continuing right after structs' own -
+  // the exact same treatment arrayBaseLocalIndexBySlotId/
+  // structBaseLocalIndexBySlotId already get, mirrored precisely (a
+  // string is a linear-memory offset, same native width as an array
+  // base or struct base). Merged directly into localIndexBySlotId
+  // (not a new, separate map) since the existing "load"/"store" IR
+  // instruction encoders already consult exactly that one map by
+  // slot id, and are value-type-agnostic at the WASM bytecode level
+  // (local.get/local.set reference an index; the declared valtype at
+  // that index is what's declared below - correct because
+  // localIndexBySlotId now points string slots at real, declared i32
+  // locals) - no change needed to the load/store encoders themselves.
+  const stringSlots = fn.locals.filter(l => l.type === "string" && l.isArray !== true);
+  const stringLocalBase = i64LocalCount + arraySlots.length + structSlots.length;
+  stringSlots.forEach((l, i) => localIndexBySlotId.set(l.id, stringLocalBase + i));
+  // V2-M2: a multi-use string-typed call result (e.g. `let s = input();
+  // print(s); free(s)`) needs its own materialized i32 scratch local,
+  // positioned after strings' own group - see getMaterializedIds()'s
+  // own comment for why this can't share the i64 materialization
+  // group above.
+  const stringMaterializedCount = [...getMaterializedIds(fn).values()].filter(v => v >= STRING_MATERIALIZED_BASE && v < F64_MATERIALIZED_BASE).length;
+  // v29-D4 (Nested Array Model): ONE dedicated i32 scratch local,
+  // allocated whenever the function contains at least one baseRef-
+  // driven array_load/array_store. Required because a baseRef's own
+  // expression, when re-emitted inline (the ONLY option before this
+  // fix â€” array_load's own result was never eligible for the general
+  // fan-out/materialization mechanism above, which counts IR-level
+  // references, not how many times ONE consuming instruction's own
+  // emission logic internally reuses a value), is itself side-
+  // effecting (it writes the SHARED index-scratch local as part of
+  // its own bounds check) â€” using it twice (once for the runtime
+  // length read, once for the element address) corrupted a
+  // SUBSEQUENT nested index's own value. Confirmed directly: a[0][1]
+  // and a[1][0] returned the wrong inner element before this fix â€”
+  // exactly the "multiple evaluation" class of bug this project's
+  // own history already fixed once, for a different case (see
+  // issues/triple-evaluation-of-array-index-expression.md). This
+  // scratch is computed ONCE per baseRef access, then read via a
+  // cheap local.get for every subsequent use â€” mirroring the exact
+  // same pattern the existing index scratch already uses, just for
+  // the base address instead of the index.
+  const hasBaseRefAccess = fn.blocks.some(b => b.instructions.some(i => (i.kind === "array_load" || i.kind === "array_store") && i.baseRef !== undefined));
+  const baseRefScratchCount = hasBaseRefAccess ? 1 : 0;
+  // V2-MU: a multi-use f64 value (const/load/binop/unop/call) needs
+  // its own materialized f64 scratch local, positioned after every
+  // i32 group - see getMaterializedIds()'s own comment.
+  const f64MaterializedCount = [...getMaterializedIds(fn).values()].filter(v => v >= F64_MATERIALIZED_BASE).length;
+
+  const localGroups: Uint8Array[] = [];
+  const declaredI64LocalCount = i64LocalCount - paramCount;
+  if (declaredI64LocalCount > 0) localGroups.push(new Uint8Array([...encodeULEB128(declaredI64LocalCount), VALTYPE_I64]));
+  if (arraySlots.length > 0) localGroups.push(new Uint8Array([...encodeULEB128(arraySlots.length), VALTYPE_I32]));
+  if (structSlots.length > 0) localGroups.push(new Uint8Array([...encodeULEB128(structSlots.length), VALTYPE_I32]));
+  if (stringSlots.length > 0) localGroups.push(new Uint8Array([...encodeULEB128(stringSlots.length), VALTYPE_I32]));
+  if (stringMaterializedCount > 0) localGroups.push(new Uint8Array([...encodeULEB128(stringMaterializedCount), VALTYPE_I32]));
+  if (baseRefScratchCount > 0) localGroups.push(new Uint8Array([...encodeULEB128(baseRefScratchCount), VALTYPE_I32]));
+  if (f64MaterializedCount > 0) localGroups.push(new Uint8Array([...encodeULEB128(f64MaterializedCount), VALTYPE_F64]));
+  const localsVec = encodeVector(localGroups);
+
+  const bumpGlobalIndex = 0; // the sole WASM Global (Level 3.1B.1) is always index 0 when present.
+
+  let bodyExpr: Uint8Array;
+  if (fn.blocks.length === 1) {
+    bodyExpr = encodeReturnBlockBody(fn.blocks[0]!, fn, functionIndexByName, localIndexBySlotId, arrayBaseLocalIndexBySlotId, bumpGlobalIndex, structBaseLocalIndexBySlotId);
+  } else if (fn.blocks.length === 3) {
+    bodyExpr = encodeIfElseFunctionBody(fn, functionIndexByName, localIndexBySlotId, arrayBaseLocalIndexBySlotId, bumpGlobalIndex, structBaseLocalIndexBySlotId);
+  } else if (fn.blocks.length === 7) {
+    // break (3.1A.6b) vs. continue (3.1A.6c) vs. nested if (Layer 2,
+    // per WASM_NESTED_CONTROL_FLOW_LAYER2_DESIGN_PROPOSAL.md): same
+    // structural distinction as validateScope(). A 7-block function
+    // that is NOT a real while-break/continue shape (classifySevenBlockShape
+    // returns undefined) may still be a genuine, valid nested-if
+    // structure (Layer 1's own isNestedIfStructureValid) - this is
+    // additive only: every existing break/continue path is completely
+    // unchanged.
+    const shape = classifySevenBlockShape(fn);
+    if (shape === "continue") {
+      bodyExpr = encodeWhileContinueFunctionBody(fn, functionIndexByName, localIndexBySlotId);
+    } else if (shape === "break") {
+      bodyExpr = encodeWhileBreakFunctionBody(fn, functionIndexByName, localIndexBySlotId);
+    } else if (isNestedIfStructureValid(fn)) {
+      const entry = fn.blocks.find(b => b.id === fn.entryBlock)!;
+      bodyExpr = concatBytes(
+        encodeReturnBlockBody(entry, fn, functionIndexByName, localIndexBySlotId, arrayBaseLocalIndexBySlotId, bumpGlobalIndex, structBaseLocalIndexBySlotId),
+        // Unreachable fallback, matching encodeIfElseFunctionBody's
+        // own established pattern - required only for WASM's type-
+        // checking of the function's own final expression; every
+        // real path already returned via a real, explicit OPCODE_RETURN.
+        OPCODE_I64_CONST, encodeSLEB128(0n),
+        OPCODE_RETURN,
+      );
+    } else {
+      // Unreachable given validateScope() already ran - defensive only.
+      throw new WasmUnsupportedError({ code: WASM_CODES.UNSUPPORTED_CFG_SHAPE, functionName: fn.sourceName, message: "internal error: 7-block shape passed validateScope() but matched neither break/continue nor a valid nested-if structure" });
+    }
+  } else {
+    // Merge (3.1A.5) vs. while (3.1A.6) vs. nested if (Layer 2): same
+    // structural distinction as validateScope(). Real, safe fallback
+    // order: try the two existing, established shapes first (exactly
+    // as before, unchanged); only fall back to nested-if handling if
+    // neither real shape matches - matching classifyTopLevelShape's
+    // own real structural checks (not merely entry.terminator.kind
+    // alone, which could misclassify a genuine nested-if entry that
+    // happens to also start with cond_branch).
+    const entry = fn.blocks.find(b => b.id === fn.entryBlock)!;
+    const shape = classifyTopLevelShape(fn);
+    if (shape.kind === "if-else-merge") {
+      bodyExpr = encodeIfElseMergeFunctionBody(fn, functionIndexByName, localIndexBySlotId, arrayBaseLocalIndexBySlotId, bumpGlobalIndex, structBaseLocalIndexBySlotId);
+    } else if (shape.kind === "while-basic") {
+      bodyExpr = encodeWhileFunctionBody(fn, functionIndexByName, localIndexBySlotId, arrayBaseLocalIndexBySlotId, bumpGlobalIndex, structBaseLocalIndexBySlotId);
+    } else if (isNestedIfStructureValid(fn)) {
+      bodyExpr = concatBytes(
+        encodeReturnBlockBody(entry, fn, functionIndexByName, localIndexBySlotId, arrayBaseLocalIndexBySlotId, bumpGlobalIndex, structBaseLocalIndexBySlotId),
+        OPCODE_I64_CONST, encodeSLEB128(0n),
+        OPCODE_RETURN,
+      );
+    } else {
+      // Unreachable given validateScope() already ran - defensive only.
+      throw new WasmUnsupportedError({ code: WASM_CODES.UNSUPPORTED_CFG_SHAPE, functionName: fn.sourceName, message: "internal error: CFG shape passed validateScope() but matched neither merge, while, nor a valid nested-if structure" });
+    }
+  }
+  const body = concatBytes(localsVec, bodyExpr, OPCODE_END);
+  return withLength(body);
+}
+
+
+=== 2. WASM FUNCTION BODY ENCODING ===
+  // the base address instead of the index.
+  const hasBaseRefAccess = fn.blocks.some(b => b.instructions.some(i => (i.kind === "array_load" || i.kind === "array_store") && i.baseRef !== undefined));
+  const baseRefScratchCount = hasBaseRefAccess ? 1 : 0;
+  // V2-MU: a multi-use f64 value (const/load/binop/unop/call) needs
+  // its own materialized f64 scratch local, positioned after every
+  // i32 group - see getMaterializedIds()'s own comment.
+  const f64MaterializedCount = [...getMaterializedIds(fn).values()].filter(v => v >= F64_MATERIALIZED_BASE).length;
+
+  const localGroups: Uint8Array[] = [];
+  const declaredI64LocalCount = i64LocalCount - paramCount;
+  if (declaredI64LocalCount > 0) localGroups.push(new Uint8Array([...encodeULEB128(declaredI64LocalCount), VALTYPE_I64]));
+  if (arraySlots.length > 0) localGroups.push(new Uint8Array([...encodeULEB128(arraySlots.length), VALTYPE_I32]));
+  if (structSlots.length > 0) localGroups.push(new Uint8Array([...encodeULEB128(structSlots.length), VALTYPE_I32]));
+  if (stringSlots.length > 0) localGroups.push(new Uint8Array([...encodeULEB128(stringSlots.length), VALTYPE_I32]));
+  if (stringMaterializedCount > 0) localGroups.push(new Uint8Array([...encodeULEB128(stringMaterializedCount), VALTYPE_I32]));
+  if (baseRefScratchCount > 0) localGroups.push(new Uint8Array([...encodeULEB128(baseRefScratchCount), VALTYPE_I32]));
+  if (f64MaterializedCount > 0) localGroups.push(new Uint8Array([...encodeULEB128(f64MaterializedCount), VALTYPE_F64]));
+  const localsVec = encodeVector(localGroups);
+
+  const bumpGlobalIndex = 0; // the sole WASM Global (Level 3.1B.1) is always index 0 when present.
+
+  let bodyExpr: Uint8Array;
+  if (fn.blocks.length === 1) {
+    bodyExpr = encodeReturnBlockBody(fn.blocks[0]!, fn, functionIndexByName, localIndexBySlotId, arrayBaseLocalIndexBySlotId, bumpGlobalIndex, structBaseLocalIndexBySlotId);
+  } else if (fn.blocks.length === 3) {
+    bodyExpr = encodeIfElseFunctionBody(fn, functionIndexByName, localIndexBySlotId, arrayBaseLocalIndexBySlotId, bumpGlobalIndex, structBaseLocalIndexBySlotId);
+  } else if (fn.blocks.length === 7) {
+    // break (3.1A.6b) vs. continue (3.1A.6c) vs. nested if (Layer 2,
+    // per WASM_NESTED_CONTROL_FLOW_LAYER2_DESIGN_PROPOSAL.md): same
+    // structural distinction as validateScope(). A 7-block function
+    // that is NOT a real while-break/continue shape (classifySevenBlockShape
+    // returns undefined) may still be a genuine, valid nested-if
+    // structure (Layer 1's own isNestedIfStructureValid) - this is
+    // additive only: every existing break/continue path is completely
+    // unchanged.
+    const shape = classifySevenBlockShape(fn);
+    if (shape === "continue") {
+      bodyExpr = encodeWhileContinueFunctionBody(fn, functionIndexByName, localIndexBySlotId);
+    } else if (shape === "break") {
+      bodyExpr = encodeWhileBreakFunctionBody(fn, functionIndexByName, localIndexBySlotId);
+    } else if (isNestedIfStructureValid(fn)) {
+      const entry = fn.blocks.find(b => b.id === fn.entryBlock)!;
+      bodyExpr = concatBytes(
+        encodeReturnBlockBody(entry, fn, functionIndexByName, localIndexBySlotId, arrayBaseLocalIndexBySlotId, bumpGlobalIndex, structBaseLocalIndexBySlotId),
+        // Unreachable fallback, matching encodeIfElseFunctionBody's
+        // own established pattern - required only for WASM's type-
+        // checking of the function's own final expression; every
+        // real path already returned via a real, explicit OPCODE_RETURN.
+        OPCODE_I64_CONST, encodeSLEB128(0n),
+        OPCODE_RETURN,
+      );
+    } else {
+      // Unreachable given validateScope() already ran - defensive only.
+      throw new WasmUnsupportedError({ code: WASM_CODES.UNSUPPORTED_CFG_SHAPE, functionName: fn.sourceName, message: "internal error: 7-block shape passed validateScope() but matched neither break/continue nor a valid nested-if structure" });
+    }
+  } else {
+    // Merge (3.1A.5) vs. while (3.1A.6) vs. nested if (Layer 2): same
+    // structural distinction as validateScope(). Real, safe fallback
+    // order: try the two existing, established shapes first (exactly
+    // as before, unchanged); only fall back to nested-if handling if
+    // neither real shape matches - matching classifyTopLevelShape's
+    // own real structural checks (not merely entry.terminator.kind
+    // alone, which could misclassify a genuine nested-if entry that
+    // happens to also start with cond_branch).
+    const entry = fn.blocks.find(b => b.id === fn.entryBlock)!;
+    const shape = classifyTopLevelShape(fn);
+    if (shape.kind === "if-else-merge") {
+      bodyExpr = encodeIfElseMergeFunctionBody(fn, functionIndexByName, localIndexBySlotId, arrayBaseLocalIndexBySlotId, bumpGlobalIndex, structBaseLocalIndexBySlotId);
+    } else if (shape.kind === "while-basic") {
+      bodyExpr = encodeWhileFunctionBody(fn, functionIndexByName, localIndexBySlotId, arrayBaseLocalIndexBySlotId, bumpGlobalIndex, structBaseLocalIndexBySlotId);
+    } else if (isNestedIfStructureValid(fn)) {
+      bodyExpr = concatBytes(
+        encodeReturnBlockBody(entry, fn, functionIndexByName, localIndexBySlotId, arrayBaseLocalIndexBySlotId, bumpGlobalIndex, structBaseLocalIndexBySlotId),
+        OPCODE_I64_CONST, encodeSLEB128(0n),
+        OPCODE_RETURN,
+      );
+    } else {
+      // Unreachable given validateScope() already ran - defensive only.
+      throw new WasmUnsupportedError({ code: WASM_CODES.UNSUPPORTED_CFG_SHAPE, functionName: fn.sourceName, message: "internal error: CFG shape passed validateScope() but matched neither merge, while, nor a valid nested-if structure" });
+    }
+  }
+  const body = concatBytes(localsVec, bodyExpr, OPCODE_END);
+  return withLength(body);
+}
+
+/** Recomputes the shared index-materialization scratch local's WASM local index (see the FIX note in encodeFunctionBody()) directly from fn.locals â€” matching that same computation exactly, without needing to thread it as a new parameter through every intermediate encoder function. Returns -1 if fn has no array-typed slots (meaning no array access exists, so this scratch local was never allocated). */
+function getIndexScratchLocalIndex(fn: IRFunction): number {
+  // V29-D2: kept in sync with encodeFunctionBody()'s own scalarSlots/
+  // hasAnyArrayAccess exclusions above (isArrayParam excluded from the
+  // scalar count, included in the array-access check) - the pre-
+  // existing lack of a `l.type !== "string"` filter here, unlike
+  // scalarSlots's own, is untouched, unrelated pre-existing behavior,
+  // not something this narrow change addresses.
+  //
+  // A second, previously-latent gap, now surfaced and fixed: this
+  // formula never added fn.params.length (paramCount) - harmless
+  // before, since every prior function had paramCount === 0 (no
+  // support for real parameters existed), but a real, visible bug
+  // once a function genuinely has parameters (confirmed directly:
+  // WebAssembly.instantiate failed with "local.set[0] expected type
+
+=== 3. WASM MEMORY INITIALIZATION TESTS ===
+  it("the correct br 1 depth produces the mathematically correct result (50), confirmed matching C Backend", async () => {
+    await assertBackendCorrectness("function main(): int\n  let i = 0\n  let total = 0\n  while i < 10\n    i = i + 1\n    if i == 5\n      continue\n    end\n    total = total + i\n  end\n  return total\nend\n", 50n);
+  });
+});
+
+describe("WASM Backend 3.1B.1 - Linear Memory Foundation, Backend Correctness", () => {
+  it("REVIEWER'S ORIGINAL EXAMPLE: let arr=[10,20,30]; return arr[1] - matches C Backend", async () => {
+    await assertBackendCorrectness("function main(): int\n  let arr = [10, 20, 30]\n  return arr[1]\nend\n", 20n);
+  });
+
+  it("BOUNDARY: read index 0 (the first element)", async () => {
+    await assertBackendCorrectness("function main(): int\n  let arr = [10, 20, 30]\n  return arr[0]\nend\n", 10n);
+  });
+
+  it("BOUNDARY: read the last valid index", async () => {
+    await assertBackendCorrectness("function main(): int\n  let arr = [10, 20, 30]\n  return arr[2]\nend\n", 30n);
+  });
+
+  it("two arrays declared in sequence (the exact MEMORY_LAYOUT_EXAMPLES.md Example 2 scenario)", async () => {
+    await assertBackendCorrectness("function main(): int\n  let a = [7, 8]\n  let b = [1, 2, 3, 4]\n  return b[2]\nend\n", 3n);
+  });
+
+  it("a COMPUTED (non-literal) index - per WASM_MEMORY_MODEL_SPEC.md section 4's Single-Formula Commitment, this must work identically to a constant index", async () => {
+    await assertBackendCorrectness("function main(): int\n  let arr = [10, 20, 30]\n  let i = 1 + 1\n  return arr[i]\nend\n", 30n);
+  });
+
+  it("a computed (arithmetic expression) VALUE stored into an array element", async () => {
+    await assertBackendCorrectness("function main(): int\n  let arr = [2 + 3, 10 - 4]\n  return arr[0]\nend\n", 5n);
+  });
+});
+
+describe("WASM Backend - ARRAY_LAYOUT_CONTRACT (permanent regression guard, per WASM_MEMORY_MODEL_SPEC.md section 9 - directly inspects real memory contents, not merely the final computed result)", () => {
+  async function getMemoryAfterExecution(src: string): Promise<DataView> {
+    const module = compileToModule(src);
+    const bytes = emitWasmModule(module);
+    const { instance } = await WebAssembly.instantiate(bytes);
+    (instance.exports.main as () => bigint)();
+    return new DataView((instance.exports.memory as WebAssembly.Memory).buffer);
+  }
+
+  it("a single 3-element array lands at EXACTLY the offsets WASM_MEMORY_MODEL_SPEC.md section 2 specifies (length at +0, elements at +8/+16/+24 relative to base)", async () => {
+    const view = await getMemoryAfterExecution("function main(): int\n  let arr = [10, 20, 30]\n  return arr[1]\nend\n");
+    // Base address is BUMP_INITIAL_ADDRESS (8), per the Memory Model.
+    expect(view.getBigInt64(8, true)).toBe(3n);   // length
+    expect(view.getBigInt64(16, true)).toBe(10n); // arr[0]
+    expect(view.getBigInt64(24, true)).toBe(20n); // arr[1]
+    expect(view.getBigInt64(32, true)).toBe(30n); // arr[2]
+  });
+
+  it("the exact two-array layout from MEMORY_LAYOUT_EXAMPLES.md Example 2 (adjusted for this Backend's actual BUMP_INITIAL_ADDRESS base of 8, not the example's illustrative 1024)", async () => {
+    const view = await getMemoryAfterExecution("function main(): int\n  let a = [7, 8]\n  let b = [1, 2, 3, 4]\n  return b[2]\nend\n");
+    expect(view.getBigInt64(8, true)).toBe(2n);   // a.length
+    expect(view.getBigInt64(16, true)).toBe(7n);  // a[0]
+    expect(view.getBigInt64(24, true)).toBe(8n);  // a[1]
+    expect(view.getBigInt64(32, true)).toBe(4n);  // b.length (a's base 8 + a's total size 24 = 32)
+    expect(view.getBigInt64(40, true)).toBe(1n);  // b[0]
+    expect(view.getBigInt64(48, true)).toBe(2n);  // b[1]
+    expect(view.getBigInt64(56, true)).toBe(3n);  // b[2]
+    expect(view.getBigInt64(64, true)).toBe(4n);  // b[3]
+  });
+
+  it("address 0-7 (the reserved zero region) is never written by any array allocation", async () => {
+    const view = await getMemoryAfterExecution("function main(): int\n  let arr = [10, 20, 30]\n  return arr[1]\nend\n");
+    expect(view.getBigInt64(0, true)).toBe(0n);
+  });
+});
+
+describe("WASM Backend - BUMP_MONOTONIC_CONTRACT (permanent regression guard, per WASM_MEMORY_MODEL_SPEC.md section 9)", () => {
+  it("two arrays declared in sequence receive NON-OVERLAPPING address ranges, with the second's base equal to the first's base plus the first's total size (8 + length*8)", async () => {
+    const module = compileToModule("function main(): int\n  let a = [7, 8]\n  let b = [1, 2, 3, 4]\n  return b[2]\nend\n");
+    const bytes = emitWasmModule(module);
+    const { instance } = await WebAssembly.instantiate(bytes);
+    (instance.exports.main as () => bigint)();
+    const view = new DataView((instance.exports.memory as WebAssembly.Memory).buffer);
+    const aBase = 8; // BUMP_INITIAL_ADDRESS
+    const aTotalSize = 8 + 2 * 8; // ARRAY_HEADER_SIZE + length*ELEMENT_SIZE
+    const bBase = aBase + aTotalSize;
+    expect(bBase).toBe(32);
+    expect(view.getBigInt64(bBase, true)).toBe(4n); // b.length, confirming b truly starts exactly here
+  });
+});
+
+describe("WASM Backend - ELEMENT_SIZE_IMMUTABLE_CONTRACT (permanent regression guard, per explicit review request)", () => {
+  it("ELEMENT_SIZE is exactly 8 (the current, only supported element width - i64)", async () => {
+    const { ELEMENT_SIZE } = await import("../../../src/backend/wasm/array-memory.js");
+    expect(ELEMENT_SIZE).toBe(8);
+  });
+
+  it("every element in a real array is spaced EXACTLY ELEMENT_SIZE bytes apart in actual emitted memory - not merely asserted, but measured", async () => {
+    const module = compileToModule("function main(): int\n  let arr = [1, 2, 3]\n  return arr[0]\nend\n");
+    const bytes = emitWasmModule(module);
+    const { instance } = await WebAssembly.instantiate(bytes);
+    (instance.exports.main as () => bigint)();
+    const view = new DataView((instance.exports.memory as WebAssembly.Memory).buffer);
+    const { ELEMENT_SIZE, ARRAY_HEADER_SIZE, BUMP_INITIAL_ADDRESS } = await import("../../../src/backend/wasm/array-memory.js");
+    const elem0Addr = BUMP_INITIAL_ADDRESS + ARRAY_HEADER_SIZE;
+    expect(view.getBigInt64(elem0Addr, true)).toBe(1n);
+    expect(view.getBigInt64(elem0Addr + ELEMENT_SIZE, true)).toBe(2n);
+    expect(view.getBigInt64(elem0Addr + 2 * ELEMENT_SIZE, true)).toBe(3n);
+  });
+});
+
+describe("WASM Backend - MEMORY_LAYOUT_IMMUTABLE_CONTRACT (permanent, cross-phase regression guard, per explicit review request - must NEVER be updated to match a layout change; a failure here means the layout drifted and must be reverted)", () => {
+  it("ARRAY_HEADER_SIZE is exactly 8 (one i64 length field) - the ratified, permanent layout from WASM_MEMORY_MODEL_SPEC.md section 2", async () => {
+    const { ARRAY_HEADER_SIZE } = await import("../../../src/backend/wasm/array-memory.js");
+    expect(ARRAY_HEADER_SIZE).toBe(8);
+  });
+
+  it("BUMP_INITIAL_ADDRESS is exactly 8 (bytes 0-7 permanently reserved) - the ratified, permanent starting point from WASM_MEMORY_MODEL_SPEC.md section 1", async () => {
+    const { BUMP_INITIAL_ADDRESS } = await import("../../../src/backend/wasm/array-memory.js");
+    expect(BUMP_INITIAL_ADDRESS).toBe(8);
+  });
+
+  it("the length field is at offset +0 and the first element is at offset +ARRAY_HEADER_SIZE, relative to the array's base - confirmed against real emitted memory, not merely the constants in isolation. NOTE: uses a 2-element array, not 1 - a single-element array (length===1) is a PRE-EXISTING, documented Level 2.8 edge case (IRLocalSlot.length's own doc comment: 'undefined/1 means scalar') that the ALREADY-FROZEN C Backend itself cannot compile either (confirmed directly: it emits invalid C, declaring a scalar then indexing it as an array) - out of scope for this batch, not a WASM Backend defect.", async () => {
+    const module = compileToModule("function main(): int\n  let arr = [77, 99]\n  return arr[1]\nend\n");
+    const bytes = emitWasmModule(module);
+    const { instance } = await WebAssembly.instantiate(bytes);
+    (instance.exports.main as () => bigint)();
+    const view = new DataView((instance.exports.memory as WebAssembly.Memory).buffer);
+    const { ARRAY_HEADER_SIZE, BUMP_INITIAL_ADDRESS } = await import("../../../src/backend/wasm/array-memory.js");
+    expect(view.getBigInt64(BUMP_INITIAL_ADDRESS + 0, true)).toBe(2n);  // length
+    expect(view.getBigInt64(BUMP_INITIAL_ADDRESS + ARRAY_HEADER_SIZE, true)).toBe(77n); // arr[0]
+    expect(view.getBigInt64(BUMP_INITIAL_ADDRESS + ARRAY_HEADER_SIZE + ARRAY_HEADER_SIZE, true)).toBe(99n); // arr[1]
+  });
+});
+
+describe("WASM Backend - BOUNDS_CHECK_REQUIRED_CONTRACT (3.1B.2 - supersedes NO_BOUNDS_CHECK_YET_CONTRACT, per explicit review: 'ظ„ط§ ط£ظ†طµط­ ط¨ط­ط°ظپظ‡طŒ ط¨ظ„ ط§ط³طھط¨ط¯ط§ظ„ظ‡'. HISTORICAL NOTE, preserved rather than deleted: NO_BOUNDS_CHECK_YET_CONTRACT (3.1B.1) documented the ABSENCE of this check as a real, then-current gap; this contract documents its PRESENCE as a now-mandatory guarantee - the same underlying behavior, tracked across its two states, not two unrelated tests.)", () => {
+  it("an in-bounds constant index proceeds normally (no trap)", async () => {
+    const module = compileToModule("function main(): int\n  let arr = [10, 20, 30]\n  return arr[1]\nend\n");
+    const bytes = emitWasmModule(module);
+    expect(WebAssembly.validate(bytes)).toBe(true);
+    const { instance } = await WebAssembly.instantiate(bytes);
+    expect((instance.exports.main as () => bigint)()).toBe(20n);
+  });
+
+  it("an out-of-bounds constant index (index 5 on a 3-element array) is now MANDATORILY rejected - traps via a real WebAssembly.RuntimeError, confirmed by actual execution", async () => {
+    const module = compileToModule("function main(): int\n  let arr = [10, 20, 30]\n  return arr[5]\nend\n");
+    const bytes = emitWasmModule(module);
+    expect(WebAssembly.validate(bytes)).toBe(true);
+    const { instance } = await WebAssembly.instantiate(bytes);
+    let trapped = false;
+    try {
+      (instance.exports.main as () => bigint)();
+    } catch (e) {
+      trapped = e instanceof WebAssembly.RuntimeError;
+    }
+    expect(trapped).toBe(true);
+  });
+
+  it("a negative index is also rejected - traps via a real WebAssembly.RuntimeError", async () => {
+    const module = compileToModule("function main(): int\n  let arr = [10, 20, 30]\n  return arr[0 - 1]\nend\n");
+    const bytes = emitWasmModule(module);
+    expect(WebAssembly.validate(bytes)).toBe(true);
+    const { instance } = await WebAssembly.instantiate(bytes);
+    let trapped = false;
+    try {
+      (instance.exports.main as () => bigint)();
+    } catch (e) {
+      trapped = e instanceof WebAssembly.RuntimeError;
+    }
+
+=== 4. C RUNTIME ARRAY TESTS ===
+
+
+Path       : D:\ur-bridge-v27-final\tests\codegen\golden\16-array-literal-read\expected.c
+LineNumber : 14
+Line       :   int64_t* slot_arr = (int64_t*)ur_gc_alloc_array(3, UR_GC_ELEMENT_SCALAR);
+
+Path       : D:\ur-bridge-v27-final\tests\codegen\golden\17-array-write\expected.c
+LineNumber : 14
+Line       :   int64_t* slot_arr = (int64_t*)ur_gc_alloc_array(3, UR_GC_ELEMENT_SCALAR);
+
+Path       : D:\ur-bridge-v27-final\tests\codegen\golden\18-array-while\expected.c
+LineNumber : 14
+Line       :   int64_t* slot_arr = (int64_t*)ur_gc_alloc_array(5, UR_GC_ELEMENT_SCALAR);
+
+Path       : D:\ur-bridge-v27-final\tests\codegen\golden\19-array-if\expected.c
+LineNumber : 14
+Line       :   int64_t* slot_arr = (int64_t*)ur_gc_alloc_array(3, UR_GC_ELEMENT_SCALAR);
+
+Path       : D:\ur-bridge-v27-final\tests\runtime\architecture.test.ts
+LineNumber : 76
+Line       :       // registration (ur_register_array_allocation), array header access
+             (ur_array_length) and the collector /
+
+Path       : D:\ur-bridge-v27-final\tests\runtime\architecture.test.ts
+LineNumber : 79
+Line       :         || line.includes("ur_array_length") || /\bur_gc_\w+\(/.test(line);
+
+
+
+**********************
+Windows PowerShell transcript end
+End time: 20261024223448
+**********************

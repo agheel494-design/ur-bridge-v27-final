@@ -1,0 +1,4 @@
+function main(): int
+  let arr = [10, 20, 30]
+  return arr[1 + 1]
+end

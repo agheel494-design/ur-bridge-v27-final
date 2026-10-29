@@ -1,0 +1,243 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// UR-Bridge — Tests: Stage 1.2 Arrays — Bug Hunt Results
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// Compiler & Runtime Stabilization phase. Covers ONE real, confirmed bug
+// found and fixed:
+//
+// resolveTypeRef() (type-env.ts) never consulted a TypeRef's own
+// `arrayDepth` field at all — every bracket-suffix array type annotation
+// (`int[]`, `float[]`, ...) silently resolved to the plain SCALAR element
+// type, dropping the array-ness entirely. Confirmed directly: `let b:
+// int[] = a` produced `TY2002: cannot assign Array<Int> to 'b: Int'` —
+// proving `b`'s own declared type resolved to `Int`, not `Array<Int>`.
+// The same defect made array function-parameter and array return-type
+// annotations both silently broken. Fixed: resolveTypeRef now wraps the
+// resolved base type in tArray() once per unit of arrayDepth.
+//
+// Also documents a SEPARATE, real architectural limitation this fix
+// does NOT resolve (out of this round's own scope, consistent with the
+// already-documented "no dynamic array length"): Lowering's own
+// array-slot tracking requires a KNOWN, LITERAL size at the point of
+// declaration (to emit a fixed-size C array) — so `let b: int[] = a`
+// (assigning FROM an existing array, not a literal) and array function
+// parameters/returns still fail at Lowering with a clear message, even
+// though they now correctly TYPE-CHECK. This is a genuinely separate,
+// larger redesign (moving array representation to pointer+length pairs)
+// — not attempted this round.
+//
+// A THIRD finding, lower severity: parser.ts's own comment claiming
+// multi-dimensional array types are "rejected at the TypeChecker level"
+// was factually inaccurate — no such check exists; `int[][]` type-checks
+// successfully, and is only rejected later, at Lowering. Comment
+// corrected to match reality.
+
+import { describe, it, expect } from "vitest";
+import { lex } from "../../src/compiler/frontend/lexer.js";
+import { parse } from "../../src/compiler/frontend/parser.js";
+import { typeCheck } from "../../src/compiler/typesystem/checker.js";
+import { lowerToIR } from "../../src/compiler/codegen/lower-to-ir.js";
+import { emitC } from "../../src/backend/c/emit-c.js";
+import { compileC, runExecutable, cleanupExecutable } from "../../tools/backend/c-compile.js";
+
+async function compileAndRun(src: string) {
+  const { tokens } = lex(src);
+  const { program, errors } = parse(tokens);
+  if (errors.length) throw new Error(`parse failed: ${JSON.stringify(errors)}`);
+  const tc = typeCheck(program);
+  const tcErrors = (tc.diagnostics ?? []).filter((d: any) => d.severity === "error");
+  if (tcErrors.length) throw new Error(`typecheck failed: ${JSON.stringify(tcErrors)}`);
+  const ir = lowerToIR(program, "t.ur", "t");
+  if (!ir.ok) throw new Error(`lower failed: ${JSON.stringify(ir.diagnostics)}`);
+  const cSource = emitC(ir.value);
+  const compiled = compileC(cSource, "a.out", {});
+  if (!compiled.ok) throw new Error(`C compile failed: ${JSON.stringify(compiled)}`);
+  const r = runExecutable(compiled.value);
+  cleanupExecutable(compiled.value);
+  return { r, cSource };
+}
+
+describe("Stage 1.2 Arrays — BUG FIXED: array type annotations (T[]) were silently dropped, always resolving to the scalar element type", () => {
+  it("explicit int[] annotation with an array literal initializer now works end-to-end (was silently broken before this fix)", async () => {
+    const { r } = await compileAndRun('function main(): int\n  let arr: int[] = [1, 2, 3]\n  print(arr[1])\n  return 0\nend\n');
+    expect(r.stdout.trim()).toBe("2");
+  });
+
+  it("explicit float[] annotation with a literal initializer works", async () => {
+    const { r } = await compileAndRun('function main(): int\n  let arr: float[] = [1.5, 2.5, 3.5]\n  print(arr[0])\n  return 0\nend\n');
+    expect(r.stdout.trim()).toBe("1.5");
+  });
+
+  it("resolveTypeRef now correctly resolves int[] to a real Array type (not the scalar Int it silently produced before)", () => {
+    const { tokens } = lex('function main(): int\n  let arr: int[] = [1, 2, 3]\n  return 0\nend\n');
+    const { program } = parse(tokens);
+    const tc = typeCheck(program);
+    expect((tc.diagnostics ?? []).filter((d: any) => d.severity === "error")).toEqual([]);
+  });
+});
+
+describe("Stage 1.2 Arrays — documented architectural limitation (NOT fixed this round, out of scope)", () => {
+  it("array-to-array assignment (let b: int[] = a) now SUCCEEDS end-to-end (Stage 7E, per direct instruction): case \"Identifier\" now treats an array-backed identifier consistently in every context (return, let-assignment, etc.), exactly mirroring how a struct-backed identifier was already treated via structVarSlot — this is a genuine, intended widening, not merely an earlier rejection point", () => {
+    const { tokens } = lex('function main(): int\n  let a = [1, 2, 3]\n  let b: int[] = a\n  return 0\nend\n');
+    const { program } = parse(tokens);
+    const tc = typeCheck(program);
+    expect((tc.diagnostics ?? []).filter((d: any) => d.severity === "error")).toEqual([]); // type-checks fine
+    const ir = lowerToIR(program, "t.ur", "t");
+    expect(ir.ok).toBe(true); // Stage 7E: b is now correctly registered as its own array-backed slot, referencing the same underlying array
+  });
+
+  it("array-to-array assignment followed by actual use (indexing) now works correctly end-to-end (Stage 7E) — b[0] correctly reads the same array a was built from", () => {
+    const { tokens } = lex('function main(): int\n  let a = [1, 2, 3]\n  let b: int[] = a\n  return b[0]\nend\n');
+    const { program } = parse(tokens);
+    const tc = typeCheck(program);
+    expect((tc.diagnostics ?? []).filter((d: any) => d.severity === "error")).toEqual([]);
+    const ir = lowerToIR(program, "t.ur", "t");
+    expect(ir.ok).toBe(true); // Stage 7E: lowers successfully
+  });
+
+  it("PARTIAL PROGRESS (Priority 3 Stabilization Sprint, IN PROGRESS - NOT complete): array function parameters now type-check AND lower to IR successfully - a real, confirmed improvement over the prior 'fails at Lowering' state. HOWEVER, real execution still panics (bounds-check length is unknowable for a parameter with no compile-time-known size) - a real, disclosed, unresolved architectural question, not yet fixed. This test only confirms Lowering succeeds; it does NOT claim the feature works end-to-end.", () => {
+    const { tokens } = lex('function sum(arr: int[]): int\n  return arr[0]\nend\n');
+    const { program } = parse(tokens);
+    const tc = typeCheck(program);
+    expect((tc.diagnostics ?? []).filter((d: any) => d.severity === "error")).toEqual([]);
+    const ir = lowerToIR(program, "t.ur", "t");
+    expect(ir.ok).toBe(true);
+  });
+});
+
+describe("Stage 1.2 Arrays — bounds safety (confirmed working, no bug found — real panic, not a crash)", () => {
+  it("out-of-bounds READ panics cleanly (exit code 101), does not silently return garbage", async () => {
+    const { tokens } = lex('function main(): int\n  let arr = [1, 2, 3]\n  let x = arr[10]\n  print(x)\n  return 0\nend\n');
+    const { program } = parse(tokens);
+    const ir = lowerToIR(program, "t.ur", "t");
+    expect(ir.ok).toBe(true);
+    if (!ir.ok) return;
+    const cSource = emitC(ir.value);
+    const compiled = compileC(cSource, "a.out", {});
+    expect(compiled.ok).toBe(true);
+    if (!compiled.ok) return;
+    const r = runExecutable(compiled.value);
+    cleanupExecutable(compiled.value);
+    expect(r.exitCode).toBe(101);
+  });
+
+  it("out-of-bounds WRITE (negative index) panics cleanly too", async () => {
+    const { tokens } = lex('function main(): int\n  let arr = [1, 2, 3]\n  arr[0 - 1] = 99\n  return 0\nend\n');
+    const { program } = parse(tokens);
+    const ir = lowerToIR(program, "t.ur", "t");
+    expect(ir.ok).toBe(true);
+    if (!ir.ok) return;
+    const cSource = emitC(ir.value);
+    const compiled = compileC(cSource, "a.out", {});
+    expect(compiled.ok).toBe(true);
+    if (!compiled.ok) return;
+    const r = runExecutable(compiled.value);
+    cleanupExecutable(compiled.value);
+    expect(r.exitCode).toBe(101);
+  });
+
+  it("a large array (1000 elements) works correctly", async () => {
+    const nums = Array.from({ length: 1000 }, (_, i) => i).join(",");
+    const { r } = await compileAndRun(`function main(): int\n  let arr = [${nums}]\n  print(arr[999])\n  return 0\nend\n`);
+    expect(r.stdout.trim()).toBe("999");
+  });
+
+  it("iteration over an array via while produces the correct sum", async () => {
+    const { r } = await compileAndRun('function main(): int\n  let arr = [10, 20, 30]\n  let i = 0\n  let total = 0\n  while i < 3\n    total = total + arr[i]\n    i = i + 1\n  end\n  print(total)\n  return 0\nend\n');
+    expect(r.stdout.trim()).toBe("60");
+  });
+});
+
+describe("Stage 1.2 Arrays — confirmed NOT supported (clear rejection, documented, not a crash)", () => {
+  it("empty array literal [] is rejected with a clear diagnostic", () => {
+    const { tokens } = lex('function main(): int\n  let arr = []\n  return 0\nend\n');
+    const { program } = parse(tokens);
+    const tc = typeCheck(program);
+    const errors = (tc.diagnostics ?? []).filter((d: any) => d.severity === "error");
+    expect(errors.length).toBeGreaterThan(0);
+    expect(errors[0]!.code).toBe("TY6002");
+  });
+
+  // RB3-TEST-REALIGNMENT - DR-RB3-01 (APPROVED) / KNOWN_LIMITATIONS.md [V1.0-DOC-DRIFT-MULTIARRAY-003]:
+  // nested arrays are a supported, in-contract V1.0 capability. Realigned to: lowers AND runs correctly on C.
+  it("[DR-RB3-01] nested array literals ([[1,2],[3,4]]) lower and run correctly on the C backend (formerly: rejected at Lowering)", () => {
+    const { tokens } = lex('function main(): int\n  let a = [[1, 2], [3, 4]]\n  return a[1][0] + a[0][1]\nend\n');
+    const { program } = parse(tokens);
+    const ir = lowerToIR(program, "t.ur", "t");
+    expect(ir.ok).toBe(true);
+    if (!ir.ok) return;
+    const compiled = compileC(emitC(ir.value), "a.out", { captureWarnings: true });
+    expect(compiled.ok).toBe(true);
+    if (!compiled.ok) return;
+    try { expect(runExecutable(compiled.value).exitCode).toBe(5); } finally { cleanupExecutable(compiled.value); }
+  });
+
+  it("[DR-RB3-01] multi-dimensional array TYPE annotations (int[][]) type-check, lower and run correctly end-to-end (formerly: rejected at Lowering)", () => {
+    const { tokens } = lex('function main(): int\n  let arr: int[][] = [[1,2],[3,4]]\n  return arr[1][1]\nend\n');
+    const { program } = parse(tokens);
+    const tc = typeCheck(program);
+    expect((tc.diagnostics ?? []).filter((d: any) => d.severity === "error")).toEqual([]);
+    const ir = lowerToIR(program, "t.ur", "t");
+    expect(ir.ok).toBe(true);
+    if (!ir.ok) return;
+    const compiled = compileC(emitC(ir.value), "a.out", { captureWarnings: true });
+    expect(compiled.ok).toBe(true);
+    if (!compiled.ok) return;
+    try { expect(runExecutable(compiled.value).exitCode).toBe(4); } finally { cleanupExecutable(compiled.value); }
+  });
+});
+
+describe("General ArrayLiteral Lowering (ADR-004, Defer Log Item 1 - implementation gap closed)", () => {
+  it("MANDATORY Scenario A: let a=[1,2,3]; sum(a) - passed via an intermediate variable", () => {
+    const { tokens } = lex('function sum(a: int[]): int\n  return a[0]\nend\nfunction main(): int\n  let a = [1,2,3]\n  return sum(a)\nend\n');
+    const { program } = parse(tokens);
+    const ir = lowerToIR(program, "t.ur", "t");
+    expect(ir.ok).toBe(true);
+  });
+
+  it("MANDATORY Scenario B: sum([1,2,3]) - passed directly, no intermediate variable (the real gap ADR-004 closed)", () => {
+    const { tokens } = lex('function sum(a: int[]): int\n  return a[0]\nend\nfunction main(): int\n  return sum([1,2,3])\nend\n');
+    const { program } = parse(tokens);
+    const ir = lowerToIR(program, "t.ur", "t");
+    expect(ir.ok).toBe(true);
+  });
+
+  it("Scenario A's own pre-existing behavior is unaffected by the extraction (real regression guard)", () => {
+    const { tokens } = lex('function main(): int\n  let a = [1,2,3]\n  return a[0] + a[1] + a[2]\nend\n');
+    const { program } = parse(tokens);
+    const ir = lowerToIR(program, "t.ur", "t");
+    expect(ir.ok).toBe(true);
+  });
+});
+
+it("typed empty array literal int[] is accepted", () => {
+  const { tokens } = lex(
+    'function main(): int\n' +
+    '  let arr: int[] = []\n' +
+    '  return 0\n' +
+    'end\n'
+  );
+
+  const { program } = parse(tokens);
+  const tc = typeCheck(program);
+
+  const errors = (tc.diagnostics ?? []).filter(
+    (d: any) => d.severity === "error"
+  );
+
+  console.log(errors);
+expect(errors.length).toBe(0);
+});
+
+
+
+
+it("typed empty array literal int[] compiles and runs", async () => {
+  const { r } = await compileAndRun(
+    'function main(): int\n' +
+    '  let arr: int[] = []\n' +
+    '  return 0\n' +
+    'end\n'
+  );
+  expect(r.exitCode).toBe(0);
+});

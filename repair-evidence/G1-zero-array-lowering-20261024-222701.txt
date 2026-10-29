@@ -1,0 +1,752 @@
+﻿**********************
+Windows PowerShell transcript start
+Start time: 20261024222701
+Username: عقيل\عقيل
+RunAs User: عقيل\عقيل
+Configuration Name: 
+Machine: عقيل (Microsoft Windows NT 10.0.19045.0)
+Host Application: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe
+Process ID: 12412
+PSVersion: 5.1.19041.7802
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.19041.7802
+BuildVersion: 10.0.19041.7802
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+
+=== 1. VARIABLE DECLARATION TYPE CHECK ===
+
+  src\compiler\typesystem\checker.ts:7://
+─────────────────────────────────────────────────────────────────────────────
+  src\compiler\typesystem\checker.ts:8:
+  src\compiler\typesystem\checker.ts:9:// AST types are pure TypeScript interfaces — import
+type only.
+  src\compiler\typesystem\checker.ts:10:import type {
+  src\compiler\typesystem\checker.ts:11:  Program, FunctionDecl,
+> src\compiler\typesystem\checker.ts:12:  Statement, BlockStatement, VariableDeclaration,
+Assignment,
+  src\compiler\typesystem\checker.ts:13:  IfStatement, ReturnStatement,
+  src\compiler\typesystem\checker.ts:14:  Expression, SourceSpan,
+  src\compiler\typesystem\checker.ts:15:} from "../frontend/ast.js";
+  src\compiler\typesystem\checker.ts:16:
+  src\compiler\typesystem\checker.ts:17:// URType is a TypeScript discriminated union (type
+alias) → import type.
+  src\compiler\typesystem\checker.ts:18:import type { URType, StructType } from "./types.js";
+  src\compiler\typesystem\checker.ts:19:
+  src\compiler\typesystem\checker.ts:20:// Runtime values from types.ts.
+  src\compiler\typesystem\checker.ts:21:import {
+  src\compiler\typesystem\checker.ts:22:  T_INT, T_FLOAT, T_BOOL, T_STRING, T_CHAR,
+  src\compiler\typesystem\checker.ts:23:  T_UNKNOWN, T_ERROR,
+  src\compiler\typesystem\checker.ts:24:  tFunction, tOptional, tArray, tStruct,
+  src\compiler\typesystem\checker.ts:25:  typeToString, isError,
+  src\compiler\typesystem\checker.ts:26:} from "./types.js";
+  src\compiler\typesystem\checker.ts:27:
+  src\compiler\typesystem\checker.ts:28:import { TypeEnv, resolveOptionalTypeRef } from
+"./type-env.js";
+  src\compiler\typesystem\checker.ts:29:import { isAssignable, binaryOpResultType,
+unaryOpResultType } from "./compatibility.js";
+  src\compiler\typesystem\checker.ts:30:import {
+  src\compiler\typesystem\checker.ts:94:    }
+  src\compiler\typesystem\checker.ts:95:
+  src\compiler\typesystem\checker.ts:96:    // Check global initializers
+  src\compiler\typesystem\checker.ts:97:    for (const g of program.globals) {
+  src\compiler\typesystem\checker.ts:98:      if (g.initializer) {
+> src\compiler\typesystem\checker.ts:99:        const initTy = this.inferExpr(g.initializer,
+globalEnv);
+  src\compiler\typesystem\checker.ts:100:        const declaredTy = globalEnv.get(g.name) ??
+T_UNKNOWN;
+  src\compiler\typesystem\checker.ts:101:        if (!isError(initTy) && declaredTy.kind !==
+"Unknown" && !isError(declaredTy)) {
+  src\compiler\typesystem\checker.ts:102:          if (!isAssignable(initTy, declaredTy)) {
+  src\compiler\typesystem\checker.ts:103:
+this.diags.push(typeError(TCODES.ASSIGN_TYPE_MISMATCH,
+  src\compiler\typesystem\checker.ts:104:              `type mismatch in global '${g.name}':
+cannot assign ${typeToString(initTy)} to ${typeToString(declaredTy)}`,
+  src\compiler\typesystem\checker.ts:105:              g.span));
+  src\compiler\typesystem\checker.ts:106:          }
+  src\compiler\typesystem\checker.ts:107:        }
+  src\compiler\typesystem\checker.ts:108:      }
+  src\compiler\typesystem\checker.ts:109:    }
+  src\compiler\typesystem\checker.ts:110:
+  src\compiler\typesystem\checker.ts:111:    for (const fn of program.functions)
+this.checkFunction(fn, globalEnv);
+  src\compiler\typesystem\checker.ts:112:    return makeTypeResult(this.diags);
+  src\compiler\typesystem\checker.ts:113:  }
+  src\compiler\typesystem\checker.ts:114:
+  src\compiler\typesystem\checker.ts:115:  // ── Function
+───────────────────────────────────────────────────────────────
+  src\compiler\typesystem\checker.ts:116:
+  src\compiler\typesystem\checker.ts:117:  private checkFunction(fn: FunctionDecl, parentEnv:
+TypeEnv): void {
+  src\compiler\typesystem\checker.ts:195:    switch (stmt.kind) {
+  src\compiler\typesystem\checker.ts:196:      case "BlockStatement":
+  src\compiler\typesystem\checker.ts:197:        this.checkBlock(stmt, env, retType);
+  src\compiler\typesystem\checker.ts:198:        break;
+  src\compiler\typesystem\checker.ts:199:
+> src\compiler\typesystem\checker.ts:200:      case "VariableDeclaration":
+  src\compiler\typesystem\checker.ts:201:        this.checkVarDecl(stmt, env);
+  src\compiler\typesystem\checker.ts:202:        break;
+  src\compiler\typesystem\checker.ts:203:
+  src\compiler\typesystem\checker.ts:204:      case "Assignment":
+  src\compiler\typesystem\checker.ts:205:        this.checkAssignment(stmt, env);
+  src\compiler\typesystem\checker.ts:206:        break;
+  src\compiler\typesystem\checker.ts:207:
+  src\compiler\typesystem\checker.ts:208:      case "IfStatement":
+  src\compiler\typesystem\checker.ts:209:        this.checkIf(stmt, env, retType);
+  src\compiler\typesystem\checker.ts:210:        break;
+  src\compiler\typesystem\checker.ts:211:
+  src\compiler\typesystem\checker.ts:212:      case "WhileStatement":
+  src\compiler\typesystem\checker.ts:213:        this.checkCondition(stmt.condition, env);
+  src\compiler\typesystem\checker.ts:214:        this.checkBlock(stmt.body, env, retType);
+  src\compiler\typesystem\checker.ts:215:        break;
+  src\compiler\typesystem\checker.ts:216:
+  src\compiler\typesystem\checker.ts:217:      case "ForStatement": {
+> src\compiler\typesystem\checker.ts:218:        this.inferExpr(stmt.iterable, env);
+  src\compiler\typesystem\checker.ts:219:        const forEnv = env.child();
+  src\compiler\typesystem\checker.ts:220:        forEnv.set(stmt.binding, T_UNKNOWN);
+  src\compiler\typesystem\checker.ts:221:        this.checkBlock(stmt.body, forEnv, retType);
+  src\compiler\typesystem\checker.ts:222:        break;
+  src\compiler\typesystem\checker.ts:223:      }
+  src\compiler\typesystem\checker.ts:224:
+  src\compiler\typesystem\checker.ts:225:      case "SwitchStatement":
+> src\compiler\typesystem\checker.ts:226:        this.inferExpr(stmt.discriminant, env);
+  src\compiler\typesystem\checker.ts:227:        for (const c of stmt.cases) {
+> src\compiler\typesystem\checker.ts:228:          if (c.test) this.inferExpr(c.test, env);
+  src\compiler\typesystem\checker.ts:229:          const caseEnv = env.child();
+  src\compiler\typesystem\checker.ts:230:          for (const s of c.body)
+this.checkStatement(s, caseEnv, retType);
+  src\compiler\typesystem\checker.ts:231:        }
+  src\compiler\typesystem\checker.ts:232:        break;
+  src\compiler\typesystem\checker.ts:233:
+  src\compiler\typesystem\checker.ts:234:      case "TryCatchStatement":
+  src\compiler\typesystem\checker.ts:235:        this.checkBlock(stmt.tryBlock, env, retType);
+  src\compiler\typesystem\checker.ts:236:        if (stmt.catchBlock) {
+  src\compiler\typesystem\checker.ts:237:          const catchEnv = env.child();
+  src\compiler\typesystem\checker.ts:238:          if (stmt.catchParam)
+catchEnv.set(stmt.catchParam, T_UNKNOWN);
+  src\compiler\typesystem\checker.ts:239:          this.checkBlock(stmt.catchBlock, catchEnv,
+retType);
+  src\compiler\typesystem\checker.ts:240:        }
+  src\compiler\typesystem\checker.ts:241:        if (stmt.finallyBlock)
+this.checkBlock(stmt.finallyBlock, env, retType);
+  src\compiler\typesystem\checker.ts:242:        break;
+  src\compiler\typesystem\checker.ts:243:
+  src\compiler\typesystem\checker.ts:244:      case "BreakStatement":
+  src\compiler\typesystem\checker.ts:245:      case "ContinueStatement":
+  src\compiler\typesystem\checker.ts:246:        break;
+  src\compiler\typesystem\checker.ts:248:      case "ReturnStatement":
+  src\compiler\typesystem\checker.ts:249:        this.checkReturn(stmt, env, retType);
+  src\compiler\typesystem\checker.ts:250:        break;
+  src\compiler\typesystem\checker.ts:251:
+  src\compiler\typesystem\checker.ts:252:      case "ExpressionStatement":
+> src\compiler\typesystem\checker.ts:253:        this.inferExpr(stmt.expression, env);
+  src\compiler\typesystem\checker.ts:254:        break;
+  src\compiler\typesystem\checker.ts:255:    }
+  src\compiler\typesystem\checker.ts:256:  }
+  src\compiler\typesystem\checker.ts:257:
+> src\compiler\typesystem\checker.ts:258:  private checkVarDecl(stmt: VariableDeclaration, env:
+TypeEnv): void {
+  src\compiler\typesystem\checker.ts:259:    const declaredTy =
+resolveOptionalTypeRef(stmt.type, name => this.unknownType(name, stmt.span), this.structTypes);
+  src\compiler\typesystem\checker.ts:260:    let resolvedTy: URType = declaredTy;
+  src\compiler\typesystem\checker.ts:261:    if (stmt.initializer) {
+> src\compiler\typesystem\checker.ts:262:      const initTy = this.inferExpr(stmt.initializer,
+env);
+  src\compiler\typesystem\checker.ts:263:      if (!isError(initTy) && declaredTy.kind !==
+"Unknown" && !isError(declaredTy)) {
+  src\compiler\typesystem\checker.ts:264:        if (!isAssignable(initTy, declaredTy)) {
+  src\compiler\typesystem\checker.ts:265:
+this.diags.push(typeError(TCODES.ASSIGN_TYPE_MISMATCH,
+  src\compiler\typesystem\checker.ts:266:            `cannot assign ${typeToString(initTy)} to
+'${stmt.name}: ${typeToString(declaredTy)}'`,
+  src\compiler\typesystem\checker.ts:267:            stmt.span));
+  src\compiler\typesystem\checker.ts:268:          resolvedTy = T_ERROR;
+  src\compiler\typesystem\checker.ts:269:        }
+  src\compiler\typesystem\checker.ts:270:      } else if (declaredTy.kind === "Unknown") {
+  src\compiler\typesystem\checker.ts:271:        resolvedTy = initTy; // infer type from
+initializer
+  src\compiler\typesystem\checker.ts:272:      }
+  src\compiler\typesystem\checker.ts:273:    }
+  src\compiler\typesystem\checker.ts:274:    env.set(stmt.name, resolvedTy);
+  src\compiler\typesystem\checker.ts:275:  }
+  src\compiler\typesystem\checker.ts:276:
+  src\compiler\typesystem\checker.ts:277:  private checkAssignment(stmt: Assignment, env:
+TypeEnv): void {
+> src\compiler\typesystem\checker.ts:278:    const valueTy = this.inferExpr(stmt.value, env);
+  src\compiler\typesystem\checker.ts:279:    if (stmt.target.kind === "Identifier") {
+  src\compiler\typesystem\checker.ts:280:      const targetTy = env.get(stmt.target.name);
+  src\compiler\typesystem\checker.ts:281:      if (targetTy && !isError(targetTy) &&
+targetTy.kind !== "Unknown" && !isError(valueTy)) {
+  src\compiler\typesystem\checker.ts:282:        if (!isAssignable(valueTy, targetTy)) {
+  src\compiler\typesystem\checker.ts:283:
+this.diags.push(typeError(TCODES.ASSIGN_TYPE_MISMATCH,
+  src\compiler\typesystem\checker.ts:284:            `cannot assign ${typeToString(valueTy)} to
+'${stmt.target.name}: ${typeToString(targetTy)}'`,
+  src\compiler\typesystem\checker.ts:285:            stmt.span));
+  src\compiler\typesystem\checker.ts:286:        }
+  src\compiler\typesystem\checker.ts:287:      }
+  src\compiler\typesystem\checker.ts:288:    } else {
+> src\compiler\typesystem\checker.ts:289:      this.inferExpr(stmt.target, env);
+  src\compiler\typesystem\checker.ts:290:    }
+  src\compiler\typesystem\checker.ts:291:  }
+  src\compiler\typesystem\checker.ts:292:
+  src\compiler\typesystem\checker.ts:293:  private checkIf(stmt: IfStatement, env: TypeEnv,
+retType: URType): void {
+  src\compiler\typesystem\checker.ts:294:    this.checkCondition(stmt.condition, env);
+  src\compiler\typesystem\checker.ts:295:    this.checkBlock(stmt.thenBranch, env, retType);
+  src\compiler\typesystem\checker.ts:296:    if (stmt.elseBranch) {
+  src\compiler\typesystem\checker.ts:297:      stmt.elseBranch.kind === "BlockStatement"
+  src\compiler\typesystem\checker.ts:298:        ? this.checkBlock(stmt.elseBranch, env,
+retType)
+  src\compiler\typesystem\checker.ts:299:        : this.checkIf(stmt.elseBranch, env, retType);
+  src\compiler\typesystem\checker.ts:300:    }
+  src\compiler\typesystem\checker.ts:301:  }
+  src\compiler\typesystem\checker.ts:302:
+  src\compiler\typesystem\checker.ts:303:  private checkCondition(expr: Expression, env:
+TypeEnv): void {
+> src\compiler\typesystem\checker.ts:304:    const ty = this.inferExpr(expr, env);
+  src\compiler\typesystem\checker.ts:305:    if (!isError(ty) && ty.kind !== "Unknown" &&
+  src\compiler\typesystem\checker.ts:306:        !(ty.kind === "Primitive" && ty.name ===
+"Bool")) {
+  src\compiler\typesystem\checker.ts:307:
+this.diags.push(typeError(TCODES.CONDITION_NOT_BOOL,
+  src\compiler\typesystem\checker.ts:308:        `condition must be Bool, got
+${typeToString(ty)}`,
+  src\compiler\typesystem\checker.ts:309:        expr.span));
+  src\compiler\typesystem\checker.ts:310:    }
+  src\compiler\typesystem\checker.ts:311:  }
+  src\compiler\typesystem\checker.ts:312:
+  src\compiler\typesystem\checker.ts:313:  private checkReturn(stmt: ReturnStatement, env:
+TypeEnv, retType: URType): void {
+  src\compiler\typesystem\checker.ts:314:    if (!stmt.value) return;
+> src\compiler\typesystem\checker.ts:315:    const valTy = this.inferExpr(stmt.value, env);
+  src\compiler\typesystem\checker.ts:316:    // Native Pointer ABI Gate A (Type Design,
+authorized, narrow scope):
+  src\compiler\typesystem\checker.ts:317:    // the integer literal `0` specifically (not any
+Int expression in
+  src\compiler\typesystem\checker.ts:318:    // general — checked against the AST node itself,
+not just its
+  src\compiler\typesystem\checker.ts:319:    // inferred type) is treated as the null-pointer
+sentinel when the
+  src\compiler\typesystem\checker.ts:320:    // declared return type is NativePtr, matching the
+universal C
+  src\compiler\typesystem\checker.ts:321:    // convention (NULL == 0). This is deliberately
+NARROWER than a
+  src\compiler\typesystem\checker.ts:322:    // general "Int is assignable to NativePtr" rule,
+which would let a
+  src\compiler\typesystem\checker.ts:323:    // program fabricate an arbitrary fake pointer
+value from any
+  src\compiler\typesystem\checker.ts:324:    // integer expression (e.g. `return 42`) - a real
+security-relevant
+  src\compiler\typesystem\checker.ts:325:    // decision explicitly NOT made here, left for its
+own future
+  src\compiler\typesystem\checker.ts:326:    // design step if ever needed. This narrow rule
+exists specifically
+  src\compiler\typesystem\checker.ts:327:    // so a signatures.ur placeholder body (`return
+0`, never actually
+  src\compiler\typesystem\checker.ts:328:    // executed for a real external/native function,
+exactly the same
+  src\compiler\typesystem\checker.ts:329:    // convention already used by every other admitted
+type) can
+  src\compiler\typesystem\checker.ts:330:    // type-check without requiring a broader coercion
+rule.
+  src\compiler\typesystem\checker.ts:331:    if (retType.kind === "Primitive" && retType.name
+=== "NativePtr"
+  src\compiler\typesystem\checker.ts:332:        && stmt.value.kind === "IntLiteral" &&
+stmt.value.value === 0) {
+  src\compiler\typesystem\checker.ts:333:      return;
+  src\compiler\typesystem\checker.ts:341:    }
+  src\compiler\typesystem\checker.ts:342:  }
+  src\compiler\typesystem\checker.ts:343:
+  src\compiler\typesystem\checker.ts:344:  // ── Expression inference
+───────────────────────────────────────────────────
+  src\compiler\typesystem\checker.ts:345:
+> src\compiler\typesystem\checker.ts:346:  inferExpr(expr: Expression, env: TypeEnv): URType {
+  src\compiler\typesystem\checker.ts:347:    switch (expr.kind) {
+  src\compiler\typesystem\checker.ts:348:      case "IntLiteral":    return T_INT;
+  src\compiler\typesystem\checker.ts:349:      case "FloatLiteral":  return T_FLOAT;
+  src\compiler\typesystem\checker.ts:350:      case "BoolLiteral":   return T_BOOL;
+  src\compiler\typesystem\checker.ts:351:      case "StringLiteral": return T_STRING;
+  src\compiler\typesystem\checker.ts:352:      case "CharLiteral":   return T_CHAR;
+  src\compiler\typesystem\checker.ts:353:      case "NullLiteral":   return
+tOptional(T_UNKNOWN);
+  src\compiler\typesystem\checker.ts:354:
+  src\compiler\typesystem\checker.ts:355:      case "ArrayLiteral": {
+  src\compiler\typesystem\checker.ts:356:        if (expr.elements.length === 0) {
+  src\compiler\typesystem\checker.ts:357:
+this.diags.push(typeError(TCODES.EMPTY_ARRAY_LITERAL,
+  src\compiler\typesystem\checker.ts:358:            `empty array literal '[]' is not supported
+in this phase — its element type cannot be determined without an explicit type annotation (not
+yet supported)`,
+  src\compiler\typesystem\checker.ts:359:            expr.span));
+  src\compiler\typesystem\checker.ts:360:          return tArray(T_ERROR);
+  src\compiler\typesystem\checker.ts:361:        }
+> src\compiler\typesystem\checker.ts:362:        const firstTy =
+this.inferExpr(expr.elements[0]!, env);
+  src\compiler\typesystem\checker.ts:363:        for (let i = 1; i < expr.elements.length; i++)
+{
+> src\compiler\typesystem\checker.ts:364:          const elTy =
+this.inferExpr(expr.elements[i]!, env);
+  src\compiler\typesystem\checker.ts:365:          if (!isError(elTy) && !isError(firstTy) &&
+!isAssignable(elTy, firstTy)) {
+  src\compiler\typesystem\checker.ts:366:
+this.diags.push(typeError(TCODES.ARRAY_ELEMENT_TYPE_MISMATCH,
+  src\compiler\typesystem\checker.ts:367:              `array element ${i + 1} has type
+${typeToString(elTy)}, expected ${typeToString(firstTy)} (from element 1)`,
+  src\compiler\typesystem\checker.ts:368:              expr.elements[i]!.span));
+  src\compiler\typesystem\checker.ts:369:          }
+  src\compiler\typesystem\checker.ts:370:        }
+  src\compiler\typesystem\checker.ts:371:        return tArray(firstTy);
+  src\compiler\typesystem\checker.ts:372:      }
+  src\compiler\typesystem\checker.ts:373:
+  src\compiler\typesystem\checker.ts:374:      case "Identifier": {
+  src\compiler\typesystem\checker.ts:375:        if (expr.name === "<error>") return T_ERROR;
+  src\compiler\typesystem\checker.ts:376:        return env.get(expr.name) ?? T_UNKNOWN;
+  src\compiler\typesystem\checker.ts:377:      }
+  src\compiler\typesystem\checker.ts:378:
+  src\compiler\typesystem\checker.ts:379:      case "UnaryExpression": {
+> src\compiler\typesystem\checker.ts:380:        const operandTy = this.inferExpr(expr.operand,
+env);
+  src\compiler\typesystem\checker.ts:381:        const result =
+unaryOpResultType(expr.operator, operandTy);
+  src\compiler\typesystem\checker.ts:382:        if (isError(result) && !isError(operandTy)) {
+  src\compiler\typesystem\checker.ts:383:
+this.diags.push(typeError(TCODES.UNARY_TYPE_ERROR,
+  src\compiler\typesystem\checker.ts:384:            `operator '${expr.operator}' cannot be
+applied to ${typeToString(operandTy)}`,
+  src\compiler\typesystem\checker.ts:385:            expr.span));
+  src\compiler\typesystem\checker.ts:386:        }
+  src\compiler\typesystem\checker.ts:387:        return result;
+  src\compiler\typesystem\checker.ts:388:      }
+  src\compiler\typesystem\checker.ts:389:
+  src\compiler\typesystem\checker.ts:390:      case "BinaryExpression": {
+> src\compiler\typesystem\checker.ts:391:        const leftTy  = this.inferExpr(expr.left, env);
+> src\compiler\typesystem\checker.ts:392:        const rightTy = this.inferExpr(expr.right,
+env);
+  src\compiler\typesystem\checker.ts:393:        const result  =
+binaryOpResultType(expr.operator, leftTy, rightTy);
+  src\compiler\typesystem\checker.ts:394:        if (isError(result) && !isError(leftTy) &&
+!isError(rightTy)) {
+  src\compiler\typesystem\checker.ts:395:
+this.diags.push(typeError(TCODES.OPERATOR_TYPE_ERROR,
+  src\compiler\typesystem\checker.ts:396:            `operator '${expr.operator}' cannot be
+applied to ${typeToString(leftTy)} and ${typeToString(rightTy)}`,
+  src\compiler\typesystem\checker.ts:397:            expr.span));
+  src\compiler\typesystem\checker.ts:398:        }
+  src\compiler\typesystem\checker.ts:399:        return result;
+  src\compiler\typesystem\checker.ts:400:      }
+  src\compiler\typesystem\checker.ts:401:
+  src\compiler\typesystem\checker.ts:402:      case "ConditionalExpression": {
+  src\compiler\typesystem\checker.ts:403:        this.checkCondition(expr.condition, env);
+> src\compiler\typesystem\checker.ts:404:        const thenTy = this.inferExpr(expr.consequent,
+env);
+> src\compiler\typesystem\checker.ts:405:        const elseTy = this.inferExpr(expr.alternate,
+env);
+  src\compiler\typesystem\checker.ts:406:        if (isAssignable(thenTy, elseTy)) return
+elseTy;
+  src\compiler\typesystem\checker.ts:407:        if (isAssignable(elseTy, thenTy)) return
+thenTy;
+  src\compiler\typesystem\checker.ts:408:        return T_UNKNOWN;
+  src\compiler\typesystem\checker.ts:409:      }
+  src\compiler\typesystem\checker.ts:410:
+  src\compiler\typesystem\checker.ts:411:      case "CallExpression": {
+> src\compiler\typesystem\checker.ts:412:        const calleeTy = this.inferExpr(expr.callee,
+env);
+> src\compiler\typesystem\checker.ts:413:        const argTypes = expr.args.map(a =>
+this.inferExpr(a, env));
+  src\compiler\typesystem\checker.ts:414:        if (calleeTy.kind === "Function") {
+  src\compiler\typesystem\checker.ts:415:          for (let i = 0; i <
+Math.min(argTypes.length, calleeTy.params.length); i++) {
+  src\compiler\typesystem\checker.ts:416:            const argTy   = argTypes[i]!;
+  src\compiler\typesystem\checker.ts:417:            const paramTy = calleeTy.params[i]!;
+  src\compiler\typesystem\checker.ts:418:            if (!isError(argTy) && !isError(paramTy)
+&& paramTy.kind !== "Unknown") {
+  src\compiler\typesystem\checker.ts:419:              if (!isAssignable(argTy, paramTy)) {
+  src\compiler\typesystem\checker.ts:420:
+this.diags.push(typeError(TCODES.CALL_ARG_TYPE_MISMATCH,
+  src\compiler\typesystem\checker.ts:421:                  `argument ${i + 1}: cannot pass
+${typeToString(argTy)} as ${typeToString(paramTy)}`,
+  src\compiler\typesystem\checker.ts:422:                  expr.args[i]!.span));
+  src\compiler\typesystem\checker.ts:423:              }
+  src\compiler\typesystem\checker.ts:424:            }
+  src\compiler\typesystem\checker.ts:425:          }
+  src\compiler\typesystem\checker.ts:426:          return calleeTy.ret;
+  src\compiler\typesystem\checker.ts:427:        }
+  src\compiler\typesystem\checker.ts:428:        // Level 2.8, LANGUAGE_SYNTAX_1_1_SPEC.md
+§2.7: struct construction.
+  src\compiler\typesystem\checker.ts:429:        // `expr.callee` is an ordinary Identifier
+here (Semantic's
+  src\compiler\typesystem\checker.ts:430:        // walkCall already validated arity via SE3001
+before TypeChecker
+  src\compiler\typesystem\checker.ts:431:        // ever runs — the precondition "zero Semantic
+diagnostics" means
+  src\compiler\typesystem\checker.ts:453:        }
+  src\compiler\typesystem\checker.ts:454:        return T_UNKNOWN;
+  src\compiler\typesystem\checker.ts:455:      }
+  src\compiler\typesystem\checker.ts:456:
+  src\compiler\typesystem\checker.ts:457:      case "MemberExpression": {
+> src\compiler\typesystem\checker.ts:458:        const objTy = this.inferExpr(expr.object, env);
+  src\compiler\typesystem\checker.ts:459:        // Level 2.8: field access (`p.x`) — resolve
+against the object's
+  src\compiler\typesystem\checker.ts:460:        // struct type, per
+LANGUAGE_SYNTAX_1_1_SPEC.md §2.2. Falls back
+  src\compiler\typesystem\checker.ts:461:        // to T_UNKNOWN for the pre-existing
+module-access usage (e.g.
+  src\compiler\typesystem\checker.ts:462:        // `math.add`), which is not struct-typed and
+was never resolved
+  src\compiler\typesystem\checker.ts:463:        // here before this phase either — no
+regression for that case.
+  src\compiler\typesystem\checker.ts:464:        if (objTy.kind === "Struct") {
+  src\compiler\typesystem\checker.ts:465:          const field = objTy.fields.find(f => f.name
+=== expr.property);
+  src\compiler\typesystem\checker.ts:466:          if (field) return field.type;
+  src\compiler\typesystem\checker.ts:467:
+this.diags.push(typeError(TCODES.UNKNOWN_TYPE,
+  src\compiler\typesystem\checker.ts:468:            `struct '${objTy.name}' has no field
+'${expr.property}'`,
+  src\compiler\typesystem\checker.ts:469:            expr.span));
+  src\compiler\typesystem\checker.ts:470:          return T_ERROR;
+  src\compiler\typesystem\checker.ts:471:        }
+  src\compiler\typesystem\checker.ts:472:        return T_UNKNOWN;
+  src\compiler\typesystem\checker.ts:473:      }
+  src\compiler\typesystem\checker.ts:474:
+  src\compiler\typesystem\checker.ts:475:      case "IndexExpression": {
+> src\compiler\typesystem\checker.ts:476:        const objTy = this.inferExpr(expr.object, env);
+> src\compiler\typesystem\checker.ts:477:        this.inferExpr(expr.index, env);
+  src\compiler\typesystem\checker.ts:478:        if (objTy.kind === "Array") return
+objTy.element;
+  src\compiler\typesystem\checker.ts:479:        if (objTy.kind === "Map")   return objTy.value;
+  src\compiler\typesystem\checker.ts:480:        return T_UNKNOWN;
+  src\compiler\typesystem\checker.ts:481:      }
+  src\compiler\typesystem\checker.ts:482:    }
+  src\compiler\typesystem\checker.ts:483:  }
+  src\compiler\typesystem\checker.ts:484:
+  src\compiler\typesystem\checker.ts:485:  private unknownType(name: string, span: SourceSpan):
+void {
+  src\compiler\typesystem\checker.ts:486:    this.diags.push(typeError(TCODES.UNKNOWN_TYPE,
+`unknown type '${name}'`, span));
+  src\compiler\typesystem\checker.ts:487:  }
+  src\compiler\typesystem\checker.ts:488:}
+  src\compiler\typesystem\checker.ts:489:
+  src\compiler\typesystem\checker.ts:490:// ── Public entry point
+─────────────────────────────────────────────────────────
+  src\compiler\typesystem\checker.ts:491:
+  src\compiler\typesystem\checker.ts:492:export function typeCheck(program: Program,
+externalStructTypes?: ReadonlyMap<string, URType>): TypeCheckResult {
+  src\compiler\typesystem\checker.ts:493:  return new TypeChecker().check(program,
+externalStructTypes);
+  src\compiler\typesystem\checker.ts:494:}
+
+=== 2. ARRAY LOWERING IMPLEMENTATION ===
+   * into a real slot + array_store sequence. Used by BOTH
+   * `VariableDeclaration` (`let a = [1,2,3]`, where `varName` is the
+   * real, named variable) and the general `lowerExpr` case (`sum([1,2,3])`
+   * â€” a direct call argument, `varName` undefined, per ADR-004:
+   * confirmed via real AST-level evidence that both positions share
+   * the same readiness point, and the difference was a real,
+   * disclosed implementation gap, not an architectural one). Extracted
+   * per direct instruction â€” a single function, not duplicated logic.
+   *
+   * Returns `null` only on a real lowering failure (a diagnostic has
+   * already been recorded via `this.error(...)`).
+   */
+  private lowerArrayLiteral(elements: readonly Expression[], varName: string | undefined, location: SourceLocation): { ref: IRValueRef; type: URType } | null {
+    if (elements.length === 0) {
+      // Semantic/TypeChecker already reject `[]` (SE/TY6002) for a
+      // valid program; this is defense-in-depth, not a new
+      // user-facing diagnostic path.
+      this.error(CODEGEN_CODES.UNSUPPORTED_CONSTRUCT, `empty array literal is not supported`, location);
+      return null;
+    }
+    const loweredElements: Array<{ ref: IRValueRef; type: URType }> = [];
+    for (const el of elements) {
+      const lowered = this.lowerExpr(el);
+      if (!lowered) return null;
+      loweredElements.push(lowered);
+    }
+    if (loweredElements[0]!.type.kind === "Array") {
+      // v29-D4 (Gap A, Nested Literal Construction): the REAL general
+      // case â€” an element that is itself an ArrayLiteral has ALREADY
+      // lowered successfully, recursively, through this exact same
+      // function (elements are lowered via lowerExpr() above, and a
+      // nested ArrayLiteral is handled by the SAME "ArrayLiteral" case
+      // in lowerExpr â€” confirmed directly, not assumed). Its own
+      // result is already a real array reference
+      // ({id:-1, arraySlot: innerSlotId}) â€” the SAME shape already
+      // proven to flow correctly through call-argument encoding
+      // (D2's own work). Per the ratified Nested Array Reference
+      // Representation Contract, the outer array's own element type
+      // is "array_ref" (a real, distinct IR type â€” not toIRType()'d,
+      // exactly mirroring the same fix already applied to a int[][]
+      // parameter's own element type in this file), and each element
+      // is STORED as a reference (the inner array's own base address),
+      // never a copy of the inner array's own contents.
+      const elementIRType: IRType = "array_ref";
+      const slotId = this.nextSlotId++;
+      this.locals.push({ id: slotId, name: varName ?? `array_tmp_${slotId}`, type: elementIRType, length: elements.length, isArray: true });
+      for (let i = 0; i < loweredElements.length; i++) {
+        const idxId = this.freshId();
+        this.instructions.push({ kind: "const", id: idxId, type: "i64", value: { kind: "const_int", value: BigInt(i) }, location });
+        this.instructions.push({ kind: "array_store", slot: slotId, index: { id: idxId }, value: loweredElements[i]!.ref, location });
+      }
+      const arrayType = tArray(loweredElements[0]!.type);
+      if (varName !== undefined) {
+        this.varEnv.set(varName, { kind: "slot", slotId });
+        this.varTypes.set(varName, arrayType);
+      }
+      return { ref: { id: -1, arraySlot: slotId }, type: arrayType };
+    }
+    // Gate V1-MIXED-STRUCT-ARRAY-REJECTION: a struct-typed array
+    // element whose own real layout mixes scalar and reference
+    // fields must be rejected here, with a real diagnostic â€” BEFORE
+    // any IRLocalSlot is created for this array â€” per the already-
+    // frozen Array<Struct> Language Contract (Gate R1.5-CGEN-002's
+    // own Point 3). This does not affect homogeneous-scalar or
+    // homogeneous-reference struct elements at all.
+    if (loweredElements[0]!.type.kind === "Struct") {
+      const layout = this.structLayouts.get(loweredElements[0]!.type.name);
+      if (layout && !this.isStructArrayElementHomogeneous(layout)) {
+        this.rejectMixedStructArrayElement(loweredElements[0]!.type.name, location);
+        return null;
+      }
+    }
+    const elementIRType = toIRType(loweredElements[0]!.type);
+    const slotId = this.nextSlotId++;
+    this.locals.push({ id: slotId, name: varName ?? `array_tmp_${slotId}`, type: elementIRType, length: elements.length, isArray: true });
+    for (let i = 0; i < loweredElements.length; i++) {
+      const idxId = this.freshId();
+      this.instructions.push({ kind: "const", id: idxId, type: "i64", value: { kind: "const_int", value: BigInt(i) }, location });
+      this.instructions.push({ kind: "array_store", slot: slotId, index: { id: idxId }, value: loweredElements[i]!.ref, location });
+    }
+    const arrayType = tArray(loweredElements[0]!.type);
+    if (varName !== undefined) {
+      this.varEnv.set(varName, { kind: "slot", slotId });
+      this.varTypes.set(varName, arrayType);
+    }
+    return { ref: { id: -1, arraySlot: slotId }, type: arrayType };
+  }
+
+  private lowerExpr(expr: Expression): { ref: IRValueRef; type: URType } | null {
+    const location = this.loc(expr.span);
+
+    switch (expr.kind) {
+      case "ArrayLiteral": {
+        // General expression position (e.g. `sum([1,2,3])`, a direct
+        // call argument) - routed through the SAME single, shared
+        // lowerArrayLiteral used by VariableDeclaration (see its own
+        // doc comment above). Closes Defer Log Item 1's own real
+        // implementation gap (ADR-004): the readiness point is the
+        // same as VariableDeclaration's own case, confirmed via real
+        // AST-level evidence, not assumed.
+        return this.lowerArrayLiteral(expr.elements, undefined, location);
+      }
+      case "IntLiteral": {
+        const id = this.freshId();
+        this.instructions.push({ kind: "const", id, type: "i64", value: { kind: "const_int", value: BigInt(expr.value) }, location });
+
+=== 3. VARIABLE DECLARATION LOWERING ===
+        // Stage 3B Remediation (per direct instruction, Option A):
+        // `let t0 = arr[i]` where `arr` is a known array of structs.
+        // Narrowly scoped to exactly this shape - IndexExpression on a
+        // known array-of-struct variable - not any other Composite
+        // Value path. Loads the indexed element via the array's own
+        // existing arraySlot (array_load is already proven correct for
+        // struct elements, per A1's own Localization Gate), stores that
+        // real struct value into a fresh, compiler-synthesized struct
+        // slot, then registers structVarSlot exactly as the three
+        // branches above already do for their own initializer shapes.
+        if (stmt.initializer.kind === "IndexExpression" && stmt.initializer.object.kind === "Identifier") {
+          const arrBinding = this.varEnv.get(stmt.initializer.object.name);
+          const elementType = this.varTypes.get(stmt.initializer.object.name);
+          if (arrBinding?.kind === "slot" && elementType?.kind === "Array" && elementType.element.kind === "Struct") {
+            const layout = this.structLayouts.get(elementType.element.name);
+            if (layout) {
+              const idx = this.lowerExpr(stmt.initializer.index);
+              if (!idx) return "failed";
+              const elemId = this.freshId();
+              this.instructions.push({ kind: "array_load", id: elemId, type: "void", slot: arrBinding.slotId, index: idx.ref, location });
+              const newSlotId = this.nextSlotId++;
+              this.locals.push({ id: newSlotId, name: stmt.name, type: "void", structLayout: layout });
+              this.instructions.push({ kind: "store", slot: newSlotId, value: { id: elemId }, location });
+              this.structVarSlot.set(stmt.name, { slotId: newSlotId, layout });
+              this.varTypes.set(stmt.name, elementType.element);
+              return "continue";
+            }
+          }
+        }
+        // Level 2.8, LANGUAGE_SYNTAX_1_1_SPEC.md آ§1: an array literal
+        // initializer always creates a NEW array slot directly â€” arrays
+        // are ALWAYS slot-backed (never plain SSA), since one SSA id
+        // cannot represent multiple elements. This is a distinct path
+        // from the generic lowerExpr()+assignVar() used for scalars.
+        if (stmt.initializer.kind === "ArrayLiteral") {
+          const result = this.lowerArrayLiteral(stmt.initializer.elements, stmt.name, location);
+          if (!result) return "failed";
+          return "continue";
+        }
+        const lowered = this.lowerExpr(stmt.initializer);
+        if (!lowered) return "failed";
+        if (lowered.ref.arraySlot !== undefined) {
+          this.varEnv.set(stmt.name, { kind: "slot", slotId: lowered.ref.arraySlot });
+          this.varTypes.set(stmt.name, lowered.type);
+          return "continue";
+        }
+        this.assignVar(stmt.name, lowered, location);
+        return "continue";
+      }
+      case "Assignment": {
+        if (stmt.target.kind === "MemberExpression") {
+          // Level 2.8, LANGUAGE_SYNTAX_1_1_SPEC.md آ§2.2/آ§2.3: `p.x = value`
+          // field assignment â€” a store into that field's OWN slot, never
+          // touching any other struct variable's fields (matches value-
+          // copy semantics: `q = p` already gave `q` fully independent
+          // field slots, so `q.x = 10` here can never affect `p.x`).
+          if (stmt.target.object.kind !== "Identifier") {
+            this.error(CODEGEN_CODES.UNSUPPORTED_CONSTRUCT, `field assignment target must be a plain variable (e.g. 'p.x = value'), not a more complex expression`, location);
+            return "failed";
+          }
+          const varSlot = this.structVarSlot.get(stmt.target.object.name);
+          if (!varSlot) {
+            this.error(CODEGEN_CODES.UNSUPPORTED_CONSTRUCT, `'${stmt.target.object.name}' is not a known struct variable`, location);
+            return "failed";
+          }
+          const targetProperty = stmt.target.property;
+          const fieldIndex = varSlot.layout.fields.findIndex(f => f.name === targetProperty);
+          if (fieldIndex === -1) {
+            this.error(CODEGEN_CODES.UNSUPPORTED_CONSTRUCT, `internal error: field '${targetProperty}' not found on '${stmt.target.object.name}' during Lowering`, location);
+            return "failed";
+          }
+          const value = this.lowerExpr(stmt.value);
+          if (!value) return "failed";
+          this.instructions.push({ kind: "field_store", slot: varSlot.slotId, fieldIndex, value: value.ref, location });
+          return "continue";
+        }
+        if (stmt.target.kind === "IndexExpression") {
+          // Level 2.8: `arr[i] = value` â€” array element assignment.
+          if (stmt.target.object.kind !== "Identifier") {
+            if (stmt.target.object.kind === "IndexExpression" || stmt.target.object.kind === "MemberExpression") {
+              // v29-D5 (Slice 3, C Contract آ§3): the write-side mirror
+              // of the read-side extension above â€” `b.values[i] = x`
+              // (object.kind === "MemberExpression") or a nested
+              // `a[i][j] = x` (object.kind === "IndexExpression", D4's
+              // own case, now also reachable from a statement target,
+              // not only an expression) both lower the outer access
+              // first, confirm it is a real array reference, then use
+              // its own result as this array_store's own baseRef â€”
+              // identical reasoning to the read-side fix.
+              const outer = this.lowerExpr(stmt.target.object);
+              if (!outer) return "failed";
+              if (outer.type.kind !== "Array") {
+                this.error(CODEGEN_CODES.UNSUPPORTED_CONSTRUCT, `array assignment target must itself be an array reference (got a non-array result from the outer expression)`, location);
+                return "failed";
+              }
+              const idx = this.lowerExpr(stmt.target.index);
+              if (!idx) return "failed";
+              const value = this.lowerExpr(stmt.value);
+              if (!value) return "failed";
+              this.instructions.push({ kind: "array_store", slot: -1, index: idx.ref, value: value.ref, location, baseRef: outer.ref });
+
+=== 4. ARRAY OBJECT MODEL ===
+/**
+ * IMPLEMENTATION BASELINE v2 â€” Semantic â†’ IR Integration
+ *
+ * SCOPE, PER DIRECT INSTRUCTION (Exit Criteria, ARRAY_PARAMETER_
+ * SEMANTICS_BASELINE.md): Semantic becomes capable of producing the
+ * v1 ArrayObjectModel. Zero modification to ir-builder.ts (Lowering)
+ * or emit-c.ts (Backend) â€” both remain completely untouched, and the
+ * OLD model remains the only one actually driving real compilation.
+ * This file's own output is not load-bearing; it exists purely to
+ * satisfy v2's own real Exit Criteria.
+ *
+ * This file reuses `resolveTypeRef` (the existing, real type-
+ * resolution helper already used by checker.ts) rather than
+ * reimplementing type resolution â€” no new type-resolution logic is
+ * introduced here.
+ */
+
+import type { Program } from "../frontend/ast.js";
+import type {
+  ArrayObjectModel,
+  ReferenceBackedObject,
+  DesignatesRelationship,
+  OwnershipRecord,
+} from "../../shared/array-object-model.js";
+
+/**
+ * Builds a real ArrayObjectModel from a real, already-parsed UR
+ * program, per v2's own Exit Criteria.
+ *
+ * Scoped honestly to the ONE case where length is genuinely known at
+ * Semantic time: a local `let` binding initialized with a real array
+ * literal (e.g. `let a = [1, 2, 3]`) â€” a real Object is created with
+ * its real, known length, and an OwnershipRecord (the originating
+ * binding owns it, per آ§3).
+ *
+ * Array-typed function PARAMETERS are deliberately NOT handled here.
+ * A parameter's own declared type (`int[]`) carries no length (per
+ * the Baseline's own Part 1 Q4/Q5) â€” a real length is only knowable
+ * from a real call site, not from Semantic analysis of the function
+ * declaration alone. Inventing a placeholder length (e.g. `-1`) would
+ * violate `validateArrayObjectModel`'s own real length>=0 rule and
+ * would misrepresent a genuinely unknown value as a real one. This
+ * case is left for a later, separate version â€” not faked here.
+ *
+ * ADDITIONAL, PREVIOUSLY UNDISCLOSED CONSTRAINT (found during review):
+ * this version supports only `VariableDeclaration` initialized by an
+ * `ArrayLiteral` (`let a = [1,2,3]`). A direct `ArrayLiteral` used as
+ * a call argument (e.g. `sum([1,2,3])`, with no intermediate `let`)
+ * is NOT handled â€” `visitStatements` only inspects `stmt.kind ===
+ * "VariableDeclaration"`, never a `CallExpression`'s own argument
+ * list. This is a real gap in what v2 actually covers, not merely a
+ * restatement of the parameter gap above.
+ */
+export function buildArrayObjectModelFromProgram(program: Program): ArrayObjectModel {
+  const objects: ReferenceBackedObject[] = [];
+  const relationships: DesignatesRelationship[] = [];
+  const ownership: OwnershipRecord[] = [];
+  let nextObjectId = 1;
+  let nextSlotId = 1;
+
+  function visitStatements(statements: readonly unknown[]): void {
+    for (const stmt of statements as any[]) {
+      if (stmt.kind === "VariableDeclaration" && stmt.initializer?.kind === "ArrayLiteral") {
+        const objectId = nextObjectId++;
+        const slotId = nextSlotId++;
+        const length = stmt.initializer.elements.length;
+        objects.push({
+          kind: "ReferenceBackedObject",
+          identity: { objectId },
+          descriptive: { length, elementType: "i64" },
+        });
+        relationships.push({ kind: "designates", bindingSlotId: slotId, objectId });
+        ownership.push({ objectId, ownerBindingSlotId: slotId });
+      }
+    }
+  }
+
+  for (const fn of program.functions) {
+    visitStatements(fn.body.statements);
+  }
+
+  return { objects, relationships, ownership };
+}
+
+=== 5. IR ARRAY REPRESENTATION ===
+
+
+
+
+Path       : D:\ur-bridge-v27-final\src\compiler\codegen\ir-builder.ts
+LineNumber : 1648
+Line       :         return { name: p.name, type: elementIrType, arrayLength: 1,
+             lengthParamCName };
+
+
+
+**********************
+Windows PowerShell transcript end
+End time: 20261024222702
+**********************

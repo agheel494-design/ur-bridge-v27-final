@@ -1,0 +1,813 @@
+{
+  "moduleName": "15-mutual-recursion",
+  "functions": [
+    {
+      "qualifiedName": "ur_15_mutual_recursion_isEven",
+      "sourceName": "isEven",
+      "params": [
+        {
+          "name": "n",
+          "type": "i64"
+        }
+      ],
+      "returnType": "bool",
+      "blocks": [
+        {
+          "id": 0,
+          "label": "entry",
+          "instructions": [
+            {
+              "kind": "param",
+              "id": 0,
+              "type": "i64",
+              "index": 0,
+              "name": "n",
+              "location": {
+                "file": "program.ur",
+                "start": {
+                  "line": 1,
+                  "column": 17
+                },
+                "end": {
+                  "line": 1,
+                  "column": 17
+                }
+              }
+            },
+            {
+              "kind": "const",
+              "id": 1,
+              "type": "i64",
+              "value": {
+                "kind": "const_int",
+                "value": "0n"
+              },
+              "location": {
+                "file": "program.ur",
+                "start": {
+                  "line": 2,
+                  "column": 11
+                },
+                "end": {
+                  "line": 2,
+                  "column": 11
+                }
+              }
+            },
+            {
+              "kind": "binop",
+              "id": 2,
+              "type": "bool",
+              "op": "eq",
+              "left": {
+                "id": 0
+              },
+              "right": {
+                "id": 1
+              },
+              "location": {
+                "file": "program.ur",
+                "start": {
+                  "line": 2,
+                  "column": 6
+                },
+                "end": {
+                  "line": 2,
+                  "column": 11
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "kind": "cond_branch",
+            "condition": {
+              "id": 2
+            },
+            "thenTarget": 1,
+            "elseTarget": 2,
+            "location": {
+              "file": "program.ur",
+              "start": {
+                "line": 2,
+                "column": 3
+              },
+              "end": {
+                "line": 4,
+                "column": 5
+              }
+            }
+          }
+        },
+        {
+          "id": 1,
+          "label": "then",
+          "instructions": [
+            {
+              "kind": "const",
+              "id": 3,
+              "type": "bool",
+              "value": {
+                "kind": "const_bool",
+                "value": true
+              },
+              "location": {
+                "file": "program.ur",
+                "start": {
+                  "line": 3,
+                  "column": 12
+                },
+                "end": {
+                  "line": 3,
+                  "column": 15
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "kind": "return",
+            "value": {
+              "id": 3
+            },
+            "location": {
+              "file": "program.ur",
+              "start": {
+                "line": 3,
+                "column": 5
+              },
+              "end": {
+                "line": 3,
+                "column": 15
+              }
+            }
+          }
+        },
+        {
+          "id": 2,
+          "label": "else",
+          "instructions": [],
+          "terminator": {
+            "kind": "branch",
+            "target": 3,
+            "location": {
+              "file": "program.ur",
+              "start": {
+                "line": 2,
+                "column": 3
+              },
+              "end": {
+                "line": 4,
+                "column": 5
+              }
+            }
+          }
+        },
+        {
+          "id": 3,
+          "label": "merge",
+          "instructions": [
+            {
+              "kind": "const",
+              "id": 4,
+              "type": "i64",
+              "value": {
+                "kind": "const_int",
+                "value": "1n"
+              },
+              "location": {
+                "file": "program.ur",
+                "start": {
+                  "line": 5,
+                  "column": 20
+                },
+                "end": {
+                  "line": 5,
+                  "column": 20
+                }
+              }
+            },
+            {
+              "kind": "binop",
+              "id": 5,
+              "type": "i64",
+              "op": "sub",
+              "left": {
+                "id": 0
+              },
+              "right": {
+                "id": 4
+              },
+              "location": {
+                "file": "program.ur",
+                "start": {
+                  "line": 5,
+                  "column": 16
+                },
+                "end": {
+                  "line": 5,
+                  "column": 20
+                }
+              }
+            },
+            {
+              "kind": "call",
+              "id": 6,
+              "type": "bool",
+              "callee": "ur_15_mutual_recursion_isOdd",
+              "args": [
+                {
+                  "id": 5
+                }
+              ],
+              "location": {
+                "file": "program.ur",
+                "start": {
+                  "line": 5,
+                  "column": 10
+                },
+                "end": {
+                  "line": 5,
+                  "column": 21
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "kind": "return",
+            "value": {
+              "id": 6
+            },
+            "location": {
+              "file": "program.ur",
+              "start": {
+                "line": 5,
+                "column": 3
+              },
+              "end": {
+                "line": 5,
+                "column": 21
+              }
+            }
+          }
+        }
+      ],
+      "entryBlock": 0,
+      "location": {
+        "file": "program.ur",
+        "start": {
+          "line": 1,
+          "column": 1
+        },
+        "end": {
+          "line": 6,
+          "column": 3
+        }
+      },
+      "locals": []
+    },
+    {
+      "qualifiedName": "ur_15_mutual_recursion_isOdd",
+      "sourceName": "isOdd",
+      "params": [
+        {
+          "name": "n",
+          "type": "i64"
+        }
+      ],
+      "returnType": "bool",
+      "blocks": [
+        {
+          "id": 0,
+          "label": "entry",
+          "instructions": [
+            {
+              "kind": "param",
+              "id": 0,
+              "type": "i64",
+              "index": 0,
+              "name": "n",
+              "location": {
+                "file": "program.ur",
+                "start": {
+                  "line": 8,
+                  "column": 16
+                },
+                "end": {
+                  "line": 8,
+                  "column": 16
+                }
+              }
+            },
+            {
+              "kind": "const",
+              "id": 1,
+              "type": "i64",
+              "value": {
+                "kind": "const_int",
+                "value": "0n"
+              },
+              "location": {
+                "file": "program.ur",
+                "start": {
+                  "line": 9,
+                  "column": 11
+                },
+                "end": {
+                  "line": 9,
+                  "column": 11
+                }
+              }
+            },
+            {
+              "kind": "binop",
+              "id": 2,
+              "type": "bool",
+              "op": "eq",
+              "left": {
+                "id": 0
+              },
+              "right": {
+                "id": 1
+              },
+              "location": {
+                "file": "program.ur",
+                "start": {
+                  "line": 9,
+                  "column": 6
+                },
+                "end": {
+                  "line": 9,
+                  "column": 11
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "kind": "cond_branch",
+            "condition": {
+              "id": 2
+            },
+            "thenTarget": 1,
+            "elseTarget": 2,
+            "location": {
+              "file": "program.ur",
+              "start": {
+                "line": 9,
+                "column": 3
+              },
+              "end": {
+                "line": 11,
+                "column": 5
+              }
+            }
+          }
+        },
+        {
+          "id": 1,
+          "label": "then",
+          "instructions": [
+            {
+              "kind": "const",
+              "id": 3,
+              "type": "bool",
+              "value": {
+                "kind": "const_bool",
+                "value": false
+              },
+              "location": {
+                "file": "program.ur",
+                "start": {
+                  "line": 10,
+                  "column": 12
+                },
+                "end": {
+                  "line": 10,
+                  "column": 16
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "kind": "return",
+            "value": {
+              "id": 3
+            },
+            "location": {
+              "file": "program.ur",
+              "start": {
+                "line": 10,
+                "column": 5
+              },
+              "end": {
+                "line": 10,
+                "column": 16
+              }
+            }
+          }
+        },
+        {
+          "id": 2,
+          "label": "else",
+          "instructions": [],
+          "terminator": {
+            "kind": "branch",
+            "target": 3,
+            "location": {
+              "file": "program.ur",
+              "start": {
+                "line": 9,
+                "column": 3
+              },
+              "end": {
+                "line": 11,
+                "column": 5
+              }
+            }
+          }
+        },
+        {
+          "id": 3,
+          "label": "merge",
+          "instructions": [
+            {
+              "kind": "const",
+              "id": 4,
+              "type": "i64",
+              "value": {
+                "kind": "const_int",
+                "value": "1n"
+              },
+              "location": {
+                "file": "program.ur",
+                "start": {
+                  "line": 12,
+                  "column": 21
+                },
+                "end": {
+                  "line": 12,
+                  "column": 21
+                }
+              }
+            },
+            {
+              "kind": "binop",
+              "id": 5,
+              "type": "i64",
+              "op": "sub",
+              "left": {
+                "id": 0
+              },
+              "right": {
+                "id": 4
+              },
+              "location": {
+                "file": "program.ur",
+                "start": {
+                  "line": 12,
+                  "column": 17
+                },
+                "end": {
+                  "line": 12,
+                  "column": 21
+                }
+              }
+            },
+            {
+              "kind": "call",
+              "id": 6,
+              "type": "bool",
+              "callee": "ur_15_mutual_recursion_isEven",
+              "args": [
+                {
+                  "id": 5
+                }
+              ],
+              "location": {
+                "file": "program.ur",
+                "start": {
+                  "line": 12,
+                  "column": 10
+                },
+                "end": {
+                  "line": 12,
+                  "column": 22
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "kind": "return",
+            "value": {
+              "id": 6
+            },
+            "location": {
+              "file": "program.ur",
+              "start": {
+                "line": 12,
+                "column": 3
+              },
+              "end": {
+                "line": 12,
+                "column": 22
+              }
+            }
+          }
+        }
+      ],
+      "entryBlock": 0,
+      "location": {
+        "file": "program.ur",
+        "start": {
+          "line": 8,
+          "column": 1
+        },
+        "end": {
+          "line": 13,
+          "column": 3
+        }
+      },
+      "locals": []
+    },
+    {
+      "qualifiedName": "ur_15_mutual_recursion_main",
+      "sourceName": "main",
+      "params": [],
+      "returnType": "i64",
+      "blocks": [
+        {
+          "id": 0,
+          "label": "entry",
+          "instructions": [
+            {
+              "kind": "const",
+              "id": 0,
+              "type": "i64",
+              "value": {
+                "kind": "const_int",
+                "value": "10n"
+              },
+              "location": {
+                "file": "program.ur",
+                "start": {
+                  "line": 16,
+                  "column": 13
+                },
+                "end": {
+                  "line": 16,
+                  "column": 14
+                }
+              }
+            },
+            {
+              "kind": "call",
+              "id": 1,
+              "type": "bool",
+              "callee": "ur_15_mutual_recursion_isEven",
+              "args": [
+                {
+                  "id": 0
+                }
+              ],
+              "location": {
+                "file": "program.ur",
+                "start": {
+                  "line": 16,
+                  "column": 6
+                },
+                "end": {
+                  "line": 16,
+                  "column": 15
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "kind": "cond_branch",
+            "condition": {
+              "id": 1
+            },
+            "thenTarget": 1,
+            "elseTarget": 2,
+            "location": {
+              "file": "program.ur",
+              "start": {
+                "line": 16,
+                "column": 3
+              },
+              "end": {
+                "line": 18,
+                "column": 5
+              }
+            }
+          }
+        },
+        {
+          "id": 1,
+          "label": "then",
+          "instructions": [
+            {
+              "kind": "const",
+              "id": 2,
+              "type": "i64",
+              "value": {
+                "kind": "const_int",
+                "value": "1n"
+              },
+              "location": {
+                "file": "program.ur",
+                "start": {
+                  "line": 17,
+                  "column": 12
+                },
+                "end": {
+                  "line": 17,
+                  "column": 12
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "kind": "return",
+            "value": {
+              "id": 2
+            },
+            "location": {
+              "file": "program.ur",
+              "start": {
+                "line": 17,
+                "column": 5
+              },
+              "end": {
+                "line": 17,
+                "column": 12
+              }
+            }
+          }
+        },
+        {
+          "id": 2,
+          "label": "else",
+          "instructions": [],
+          "terminator": {
+            "kind": "branch",
+            "target": 3,
+            "location": {
+              "file": "program.ur",
+              "start": {
+                "line": 16,
+                "column": 3
+              },
+              "end": {
+                "line": 18,
+                "column": 5
+              }
+            }
+          }
+        },
+        {
+          "id": 3,
+          "label": "merge",
+          "instructions": [
+            {
+              "kind": "const",
+              "id": 3,
+              "type": "i64",
+              "value": {
+                "kind": "const_int",
+                "value": "0n"
+              },
+              "location": {
+                "file": "program.ur",
+                "start": {
+                  "line": 19,
+                  "column": 10
+                },
+                "end": {
+                  "line": 19,
+                  "column": 10
+                }
+              }
+            }
+          ],
+          "terminator": {
+            "kind": "return",
+            "value": {
+              "id": 3
+            },
+            "location": {
+              "file": "program.ur",
+              "start": {
+                "line": 19,
+                "column": 3
+              },
+              "end": {
+                "line": 19,
+                "column": 10
+              }
+            }
+          }
+        }
+      ],
+      "entryBlock": 0,
+      "location": {
+        "file": "program.ur",
+        "start": {
+          "line": 15,
+          "column": 1
+        },
+        "end": {
+          "line": 20,
+          "column": 3
+        }
+      },
+      "locals": []
+    }
+  ],
+  "externs": [
+    {
+      "name": "ur_runtime_init",
+      "returnType": "void",
+      "parameterTypes": [
+        "i64"
+      ],
+      "callingConvention": "c",
+      "kind": "runtime",
+      "lifecycleRole": "init"
+    },
+    {
+      "name": "ur_runtime_shutdown",
+      "returnType": "void",
+      "parameterTypes": [],
+      "callingConvention": "c",
+      "kind": "runtime",
+      "lifecycleRole": "shutdown"
+    },
+    {
+      "name": "ur_print_int",
+      "returnType": "void",
+      "parameterTypes": [
+        "i64"
+      ],
+      "callingConvention": "c",
+      "kind": "runtime",
+      "lifecycleRole": "none"
+    },
+    {
+      "name": "ur_print_float",
+      "returnType": "void",
+      "parameterTypes": [
+        "f64"
+      ],
+      "callingConvention": "c",
+      "kind": "runtime",
+      "lifecycleRole": "none"
+    },
+    {
+      "name": "ur_print_bool",
+      "returnType": "void",
+      "parameterTypes": [
+        "bool"
+      ],
+      "callingConvention": "c",
+      "kind": "runtime",
+      "lifecycleRole": "none"
+    },
+    {
+      "name": "ur_print_string",
+      "returnType": "void",
+      "parameterTypes": [
+        "string"
+      ],
+      "callingConvention": "c",
+      "kind": "runtime",
+      "lifecycleRole": "none"
+    },
+    {
+      "name": "ur_input_string",
+      "returnType": "string",
+      "parameterTypes": [],
+      "callingConvention": "c",
+      "kind": "runtime",
+      "lifecycleRole": "none"
+    },
+    {
+      "name": "ur_free",
+      "returnType": "void",
+      "parameterTypes": [
+        "string"
+      ],
+      "callingConvention": "c",
+      "kind": "runtime",
+      "lifecycleRole": "none"
+    },
+    {
+      "name": "ur_panic",
+      "returnType": "void",
+      "parameterTypes": [
+        "string"
+      ],
+      "callingConvention": "c",
+      "kind": "runtime",
+      "lifecycleRole": "none"
+    }
+  ]
+}

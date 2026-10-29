@@ -1,0 +1,5 @@
+CFG for add (1 block):
+  BB0 (entry) [entry] — 3 instruction(s), terminator: return
+
+CFG for main (1 block):
+  BB0 (entry) [entry] — 7 instruction(s), terminator: return

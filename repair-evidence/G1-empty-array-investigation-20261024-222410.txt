@@ -1,0 +1,162 @@
+﻿**********************
+Windows PowerShell transcript start
+Start time: 20261024222410
+Username: عقيل\عقيل
+RunAs User: عقيل\عقيل
+Configuration Name: 
+Machine: عقيل (Microsoft Windows NT 10.0.19045.0)
+Host Application: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe
+Process ID: 12412
+PSVersion: 5.1.19041.7802
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.19041.7802
+BuildVersion: 10.0.19041.7802
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+
+=== G1: EMPTY ARRAY INVESTIGATION ===
+
+=== 1. TYPECHECKER REFERENCES ===
+
+  src\compiler\typesystem\checker.ts:352:      case "CharLiteral":   return T_CHAR;
+  src\compiler\typesystem\checker.ts:353:      case "NullLiteral":   return
+tOptional(T_UNKNOWN);
+  src\compiler\typesystem\checker.ts:354:
+> src\compiler\typesystem\checker.ts:355:      case "ArrayLiteral": {
+  src\compiler\typesystem\checker.ts:356:        if (expr.elements.length === 0) {
+> src\compiler\typesystem\checker.ts:357:
+this.diags.push(typeError(TCODES.EMPTY_ARRAY_LITERAL,
+> src\compiler\typesystem\checker.ts:358:            `empty array literal '[]' is not supported
+in this phase — its element type cannot be determined without an explicit type annotation (not
+yet supported)`,
+  src\compiler\typesystem\checker.ts:359:            expr.span));
+  src\compiler\typesystem\checker.ts:360:          return tArray(T_ERROR);
+  src\compiler\typesystem\checker.ts:361:        }
+  src\compiler\typesystem\checker.ts:362:        const firstTy =
+this.inferExpr(expr.elements[0]!, env);
+  src\compiler\typesystem\checker.ts:363:        for (let i = 1; i < expr.elements.length; i++)
+{
+
+=== 2. TYPE COMPATIBILITY REFERENCES ===
+  src\compiler\typesystem\compatibility.ts:6:import { typesEqual, isError, isUnknown, T_INT,
+T_FLOAT, T_BOOL, T_STRING, T_ERROR, T_UNKNOWN } from "./types.js";
+  src\compiler\typesystem\compatibility.ts:7:
+> src\compiler\typesystem\compatibility.ts:8:// ── Assignability
+─────────────────────────────────────────────────────────────
+  src\compiler\typesystem\compatibility.ts:9:
+  src\compiler\typesystem\compatibility.ts:10:/**
+  src\compiler\typesystem\compatibility.ts:11: * Can a value of type `from` be used where `to`
+is expected?
+  src\compiler\typesystem\compatibility.ts:25: *   6. T → Optional<T> (implicit wrapping)
+  src\compiler\typesystem\compatibility.ts:26: */
+> src\compiler\typesystem\compatibility.ts:27:export function isAssignable(from: URType, to:
+URType): boolean {
+  src\compiler\typesystem\compatibility.ts:28:  if (isError(from) || isError(to)) return true;
+  src\compiler\typesystem\compatibility.ts:29:  if (isUnknown(from) || isUnknown(to)) return
+true;
+  src\compiler\typesystem\compatibility.ts:30:  if (typesEqual(from, to)) return true;
+  src\compiler\typesystem\compatibility.ts:32:  if (from.kind === "Primitive" && from.name ===
+"Int" &&
+  src\compiler\typesystem\compatibility.ts:33:      to.kind === "Primitive" && to.name ===
+"Float") return true;
+> src\compiler\typesystem\compatibility.ts:34:  // Int assignable to Byte (see rule 5 above)
+  src\compiler\typesystem\compatibility.ts:35:  if (from.kind === "Primitive" && from.name ===
+"Int" &&
+  src\compiler\typesystem\compatibility.ts:36:      to.kind === "Primitive" && to.name ===
+"Byte") return true;
+> src\compiler\typesystem\compatibility.ts:37:  // T assignable to Optional<T>
+> src\compiler\typesystem\compatibility.ts:38:  if (to.kind === "Optional") return
+isAssignable(from, to.inner);
+  src\compiler\typesystem\compatibility.ts:39:  return false;
+  src\compiler\typesystem\compatibility.ts:40:}
+  src\compiler\typesystem\compatibility.ts:41:
+  src\compiler\typesystem\compatibility.ts:42:/** Symmetric compatibility — used for equality
+checks and ?? operator. */
+> src\compiler\typesystem\compatibility.ts:43:export function isCompatible(a: URType, b:
+URType): boolean {
+> src\compiler\typesystem\compatibility.ts:44:  return isAssignable(a, b) || isAssignable(b, a);
+  src\compiler\typesystem\compatibility.ts:45:}
+  src\compiler\typesystem\compatibility.ts:46:
+  src\compiler\typesystem\compatibility.ts:47:// ── Operator result types
+─────────────────────────────────────────────────────
+  src\compiler\typesystem\compatibility.ts:88:
+  src\compiler\typesystem\compatibility.ts:89:    case "==": case "!=": case "===": case "!==":
+> src\compiler\typesystem\compatibility.ts:90:      return isCompatible(left, right) ? T_BOOL :
+T_ERROR;
+  src\compiler\typesystem\compatibility.ts:91:
+  src\compiler\typesystem\compatibility.ts:92:    case "&&": case "||":
+  src\compiler\typesystem\compatibility.ts:93:      if (typesEqual(left, T_BOOL) &&
+typesEqual(right, T_BOOL)) return T_BOOL;
+
+=== 3. EXISTING EMPTY-ARRAY TESTS ===
+D:\ur-bridge-v27-final\tests\b1\b1-d1-free-array-c-backend.test.ts:58: const r = buildIR("function f(a: int[]): int\n  free(a)\n  return 0\nend\nfunction main(): int\n  return 0\nend\n");
+D:\ur-bridge-v27-final\tests\b1\b1-latent-l1-l2.test.ts:39: const SRC = "struct Rec\n  n: int\n  xs: int[]\nend\nfunction first(rs: Rec[]): int\n  return 1\nend\nfunction main(): int\n  return 0\nend\n";
+D:\ur-bridge-v27-final\tests\backend\wasm\differential\differential.test.ts:77: const wasmObs = wasm.observed as { printedInts: bigint[]; returnValue: bigint };
+D:\ur-bridge-v27-final\tests\backend\adr005-array-parameter-length.test.ts:70: const src = "function sum(a: int[]): int\n  return a[0] + a[1] + a[2]\nend\nfunction main(): int\n  let a = [10,20,30]\n  return sum(a)\nend\n";
+D:\ur-bridge-v27-final\tests\backend\adr005-array-parameter-length.test.ts:79: const src = "function sum(a: int[]): int\n  return a[3]\nend\nfunction main(): int\n  let a = [10,20,30]\n  return sum(a)\nend\n";
+D:\ur-bridge-v27-final\tests\backend\adr005-array-parameter-length.test.ts:86: const src = "function sum(a: int[]): int\n  return a[10]\nend\nfunction main(): int\n  let a = [10,20,30]\n  return sum(a)\nend\n";
+D:\ur-bridge-v27-final\tests\backend\adr005-array-parameter-length.test.ts:95: const src = "function sum(a: int[]): int\n  a[1] = 99\n  return a[1]\nend\nfunction check(a: int[]): int\n  return a[3]\nend\nfunction main(): int\n  let a = [10,20,30]\n  let r = sum(a)\n  return check(a)\nend\n";
+D:\ur-bridge-v27-final\tests\backend\adr005-array-parameter-length.test.ts:104: const src = "function f(a: int[]): int\n  return a[0] + a[2]\nend\nfunction g(a: int[]): int\n  return f(a)\nend\nfunction h(a: int[]): int\n  return g(a)\nend\nfunction main(): int\n  let a = [10,20,30]\n  return h(a)\nend\n";
+D:\ur-bridge-v27-final\tests\backend\adr005-array-parameter-length.test.ts:111: const src = "function f(a: int[]): int\n  return a[10]\nend\nfunction g(a: int[]): int\n  return f(a)\nend\nfunction h(a: int[]): int\n  return g(a)\nend\nfunction main(): int\n  let a = [10,20,30]\n  return h(a)\nend\n";
+D:\ur-bridge-v27-final\tests\backend\adr005-array-parameter-length.test.ts:120: const src = "function sum(a: int[]): int\n  return a[0] + a[1] + a[2]\nend\nfunction main(): int\n  let a = [10,20,30]\n  let r1 = sum(a)\n  let r2 = sum(a)\n  return r1 + r2\nend\n";
+D:\ur-bridge-v27-final\tests\backend\adr005-array-parameter-length.test.ts:129: const src = "function sum3(a: int[]): int\n  return a[0] + a[1] + a[2]\nend\nfunction sum5(a: int[]): int\n  return a[0] + a[1] + a[2] + a[3] + a[4]\nend\nfunction main(): int\n  let a = [10,20,30]\n  let b = [1,2,3,4,5]\n  return sum3(a) + sum5(b)\nend\n";
+D:\ur-bridge-v27-final\tests\backend\adr005-array-parameter-length.test.ts:138: const src = "function sum(a: int[]): int\n  return a[0]\nend\nfunction main(): int\n  let a = [10,20,30]\n  return sum(a)\nend\n";
+D:\ur-bridge-v27-final\tests\backend\adr005-array-parameter-length.test.ts:145: const src = "function sum(a: int[]): int\n  return a[0]\nend\nfunction main(): int\n  let a = [10,20,30]\n  return sum(a)\nend\n";
+D:\ur-bridge-v27-final\tests\backend\adr005-array-parameter-length.test.ts:156: const src = "function get(a: int[]): int\n  return a[4]\nend\nfunction main(): int\n  let a = [1,2,3,4,5]\n  return get(a)\nend\n";
+D:\ur-bridge-v27-final\tests\compiler\frontend\parser.test.ts:669: it("[] (empty) parses with ZERO PARSE errors - structurally valid; rejection is a TypeChecker concern (TY6002), never a Parser/Grammar one", () => {
+D:\ur-bridge-v27-final\tests\compiler\frontend\parser.test.ts:719: it("int[] parses with arrayDepth=1, name='int' (never 'int[]' concatenated into name)", () => {
+D:\ur-bridge-v27-final\tests\compiler\frontend\parser.test.ts:720: const { tokens } = lex("function f(x: int[])\nend\n");
+D:\ur-bridge-v27-final\tests\compiler\frontend\parser.test.ts:728: it("int[][] parses structurally with arrayDepth=2 - per explicit review request, even though Level 2.8's TypeChecker will reject depth>1 later; this is NOT a Parser/Grammar restriction", () => {
+D:\ur-bridge-v27-final\tests\compiler\frontend\parser.test.ts:729: const { tokens } = lex("function f(x: int[][])\nend\n");
+D:\ur-bridge-v27-final\tests\compiler\module\module.test.ts:599: it("all() returns empty array for empty registry", () => expect(new ModuleRegistry().all()).toEqual([]));
+D:\ur-bridge-v27-final\tests\compiler\semantic\semantic.test.ts:427: const src = "struct Bad\n  arr: int[]\nend\nfunction main()\nend\n";
+D:\ur-bridge-v27-final\tests\compiler\typesystem\type-system-audit-completion.test.ts:8: // Self-correction made before writing this file: TY3002/TY6002 did
+D:\ur-bridge-v27-final\tests\compiler\typesystem\type-system-audit-completion.test.ts:20: it("TY6002 (EMPTY_ARRAY_LITERAL) fires correctly", () => {
+D:\ur-bridge-v27-final\tests\compiler\typesystem\type-system-audit-completion.test.ts:21: expect(trace("function main(): int\n  let x = []\n  return 0\nend")).toContain("TY6002");
+D:\ur-bridge-v27-final\tests\compiler\stage-1-2-arrays.test.ts:10: // (`int[]`, `float[]`, ...) silently resolved to the plain SCALAR element
+D:\ur-bridge-v27-final\tests\compiler\stage-1-2-arrays.test.ts:12: // int[] = a` produced `TY2002: cannot assign Array<Int> to 'b: Int'` —
+D:\ur-bridge-v27-final\tests\compiler\stage-1-2-arrays.test.ts:22: // declaration (to emit a fixed-size C array) — so `let b: int[] = a`
+D:\ur-bridge-v27-final\tests\compiler\stage-1-2-arrays.test.ts:31: // was factually inaccurate — no such check exists; `int[][]` type-checks
+D:\ur-bridge-v27-final\tests\compiler\stage-1-2-arrays.test.ts:61: it("explicit int[] annotation with an array literal initializer now works end-to-end (was silently broken before this fix)", async () => {
+D:\ur-bridge-v27-final\tests\compiler\stage-1-2-arrays.test.ts:62: const { r } = await compileAndRun('function main(): int\n  let arr: int[] = [1, 2, 3]\n  print(arr[1])\n  return 0\nend\n');
+D:\ur-bridge-v27-final\tests\compiler\stage-1-2-arrays.test.ts:71: it("resolveTypeRef now correctly resolves int[] to a real Array type (not the scalar Int it silently produced before)", () => {
+D:\ur-bridge-v27-final\tests\compiler\stage-1-2-arrays.test.ts:72: const { tokens } = lex('function main(): int\n  let arr: int[] = [1, 2, 3]\n  return 0\nend\n');
+D:\ur-bridge-v27-final\tests\compiler\stage-1-2-arrays.test.ts:80: it("array-to-array assignment (let b: int[] = a) now SUCCEEDS end-to-end (Stage 7E, per direct instruction): case \"Identifier\" now treats an array-backed identifier consistently in every context (return, let-assignment, etc.), exactly mirroring how a struct-backed identifier was already treated via structVarSlot — this is a genuine, intended widening, not merely an earlier rejection point", () => {
+D:\ur-bridge-v27-final\tests\compiler\stage-1-2-arrays.test.ts:81: const { tokens } = lex('function main(): int\n  let a = [1, 2, 3]\n  let b: int[] = a\n  return 0\nend\n');
+D:\ur-bridge-v27-final\tests\compiler\stage-1-2-arrays.test.ts:90: const { tokens } = lex('function main(): int\n  let a = [1, 2, 3]\n  let b: int[] = a\n  return b[0]\nend\n');
+D:\ur-bridge-v27-final\tests\compiler\stage-1-2-arrays.test.ts:99: const { tokens } = lex('function sum(arr: int[]): int\n  return arr[0]\nend\n');
+D:\ur-bridge-v27-final\tests\compiler\stage-1-2-arrays.test.ts:152: it("empty array literal [] is rejected with a clear diagnostic", () => {
+D:\ur-bridge-v27-final\tests\compiler\stage-1-2-arrays.test.ts:158: expect(errors[0]!.code).toBe("TY6002");
+D:\ur-bridge-v27-final\tests\compiler\stage-1-2-arrays.test.ts:175: it("[DR-RB3-01] multi-dimensional array TYPE annotations (int[][]) type-check, lower and run correctly end-to-end (formerly: rejected at Lowering)", () => {
+D:\ur-bridge-v27-final\tests\compiler\stage-1-2-arrays.test.ts:176: const { tokens } = lex('function main(): int\n  let arr: int[][] = [[1,2],[3,4]]\n  return arr[1][1]\nend\n');
+D:\ur-bridge-v27-final\tests\compiler\stage-1-2-arrays.test.ts:192: const { tokens } = lex('function sum(a: int[]): int\n  return a[0]\nend\nfunction main(): int\n  let a = [1,2,3]\n  return sum(a)\nend\n');
+D:\ur-bridge-v27-final\tests\compiler\stage-1-2-arrays.test.ts:199: const { tokens } = lex('function sum(a: int[]): int\n  return a[0]\nend\nfunction main(): int\n  return sum([1,2,3])\nend\n');
+D:\ur-bridge-v27-final\tests\compiler\stage-functions.test.ts:77: const src = 'function make(): int[]\n  let a = [0, 0, 0]\n  let i = 0\n  while i < 3\n    a[i] = i * 10\n    i = i + 1\n  end\n  return a\nend\nfunction main(): int\n  let b = make()\n  return b[2]\nend\n';
+D:\ur-bridge-v27-final\tests\e2e\language-core-audit-suite.test.ts:87: const r = runProgram(`function main(): int\n  let a: int[] = [10, 20, 30]\n  return a[1]\nend\n`);
+D:\ur-bridge-v27-final\tests\e2e\language-core-audit-suite.test.ts:313: const r = runProgram(`function main(): int\n  let a: int[] = [10, 20, 30]\n  return a[1]\nend\n`);
+D:\ur-bridge-v27-final\tests\e2e\language-core-audit-suite.test.ts:318: const r = runProgram(`function main(): int\n  let a: int[] = [1, 2, 3]\n  return a[10]\nend\n`);
+D:\ur-bridge-v27-final\tests\lsp\lsp.test.ts:1449: // empty array. Proven on a real multi-file project: a function called
+
+=== 4. BASELINE TYPE-SYSTEM TESTS ===
+
+ RUN  v1.6.1 D:/ur-bridge-v27-final
+
+·································································································
+·································································································
+························································································
+
+ Test Files  2 passed (2)
+      Tests  282 passed (282)
+   Start at  22:24:13
+   Duration  3.40s (transform 985ms, setup 0ms, collect 1.46s, tests 311ms, environment 2ms, prep
+are 727ms)
+
+=== BASELINE EXIT CODE: 0 ===
+=== EVIDENCE FILE: .\repair-evidence\G1-empty-array-investigation-20261024-222410.txt ===
+**********************
+Windows PowerShell transcript end
+End time: 20261024222417
+**********************
