@@ -385,7 +385,11 @@ export interface SandboxOptions {
 
 export type FriOptions = { readonly timeouts?: Readonly<Record<string, { readonly runMs?: number; readonly compileMs?: number }>> };
 
-export function interpretModule(module: IRModule, entryFunctionName: string, sandboxOptions?: SandboxOptions, friOptions?: FriOptions): InterpretResult {
+export interface InterpreterIO {
+  readonly readLine?: () => string;
+}
+
+export function interpretModule(module: IRModule, entryFunctionName: string, sandboxOptions?: SandboxOptions, friOptions?: FriOptions, io?: InterpreterIO): InterpretResult {
   const fnsByName = new Map<string, IRFunction>();
   for (const fn of module.functions) fnsByName.set(fn.qualifiedName, fn);
 
@@ -406,7 +410,7 @@ export function interpretModule(module: IRModule, entryFunctionName: string, san
       case "ur_print_float": write(formatFloat(args[0] as number) + "\n"); return undefined;
       case "ur_print_bool": write(String(args[0] as boolean) + "\n"); return undefined;
       case "ur_print_string": write((args[0] as string) + "\n"); return undefined;
-      case "ur_input_string": return "";
+      case "ur_input_string": return io?.readLine?.() ?? "";
       case "ur_free": return undefined;
       case "ur_panic": throw new UrPanic(String(args[0]));
       default:

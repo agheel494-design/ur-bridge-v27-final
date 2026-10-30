@@ -26,6 +26,21 @@ function interpretSrc(src: string) {
   return interpretModule(ir.value, "main");
 }
 
+function interpretSrcWithInput(src: string, lines: string[]) {
+  const { tokens } = lex(src);
+  const { program } = parse(tokens);
+  const ir = lowerToIR(program, "t.ur", "t");
+  if (!ir.ok) throw new Error(`lower failed: ${JSON.stringify(ir.diagnostics)}`);
+
+  let index = 0;
+  return interpretModule(
+    ir.value,
+    "main",
+    undefined,
+    undefined,
+    { readLine: () => lines[index++] ?? "" },
+  );
+}
 async function compareToC(src: string) {
   const { tokens } = lex(src);
   const { program } = parse(tokens);
@@ -41,6 +56,16 @@ async function compareToC(src: string) {
 }
 
 describe("Interpreter — correctness vs the C Backend as ground truth", () => {
+  it("input() returns the injected input line", () => {
+    const result = interpretSrcWithInput(
+      "function main(): int\n  let s = input()\n  print(s)\n  return 0\nend\n",
+      ["hello"],
+    );
+
+    expect(result.stdout).toBe("hello\n");
+    expect(result.stderr).toBe("");
+    expect(result.exitCode).toBe(0);
+  });
   it("basic arithmetic matches", async () => {
     const { cResult, interpResult } = await compareToC("function main(): int\n  print(2 + 3 * 4)\n  return 0\nend\n");
     expect(interpResult.stdout.trim()).toBe(cResult.stdout.trim());
