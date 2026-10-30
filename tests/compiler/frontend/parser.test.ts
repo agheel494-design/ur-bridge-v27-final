@@ -840,6 +840,31 @@ describe("Parser - LANGUAGE FREEZE FIX: type alias declaration (was entirely abs
   });
 });
 
+describe("Parser - unsupported switch/try diagnostics", () => {
+  it("switch produces PE012 and recovers to parse the following function", () => {
+    const { tokens } = lex("function main(): int\n  switch 1\n  end\n  return 42\nend\nfunction after(): int\n  return 7\nend\n");
+    const { program, errors } = parse(tokens);
+    expect(errors.some(e => e.code === "PE012")).toBe(true);
+    expect(program.functions.map(f => f.name)).toEqual(["main", "after"]);
+    expect(program.functions[0]?.name).toBe("main");
+  });
+
+  it("try produces PE013 and recovers to parse the following function", () => {
+    const { tokens } = lex("function main(): int\n  try\n  end\n  return 42\nend\nfunction after(): int\n  return 7\nend\n");
+    const { program, errors } = parse(tokens);
+    expect(errors.some(e => e.code === "PE013")).toBe(true);
+    expect(program.functions.map(f => f.name)).toEqual(["main", "after"]);
+    expect(program.functions[0]?.name).toBe("main");
+  });
+  it("switch recovery respects nested if/end blocks", () => {
+    const { tokens } = lex("function main(): int\n  switch 1\n    if true\n      print(1)\n    end\n  end\n  return 42\nend\nfunction after(): int\n  return 7\nend\n");
+    const { program, errors } = parse(tokens);
+    expect(errors.some(e => e.code === "PE012")).toBe(true);
+    expect(program.functions.map(f => f.name)).toEqual(["main", "after"]);
+  });
+
+});
+
 describe("Parser - LANGUAGE FREEZE FIX: enum produces a clear diagnostic instead of silent success (FINAL_CONSISTENCY_REVIEW.md finding)", () => {
   it("FIXED: `enum Color / Red / Blue / end` now produces PE009 with the exact required message, not silent success", () => {
     const { tokens } = lex("enum Color\n  Red\n  Blue\nend\nfunction main(): int\n  return 42\nend\n");

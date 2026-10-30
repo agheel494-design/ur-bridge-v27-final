@@ -34,7 +34,7 @@ import { isCanonicalIn } from "../localization/index.js";
 // ── Public types ──────────────────────────────────────────────────────────────
 
 export type ParseError = {
-  code: "PE001" | "PE002" | "PE003" | "PE004" | "PE005" | "PE006" | "PE007" | "PE008" | "PE009" | "PE010" | "PE011";
+  code: "PE001" | "PE002" | "PE003" | "PE004" | "PE005" | "PE006" | "PE007" | "PE008" | "PE009" | "PE010" | "PE011" | "PE012" | "PE013";
   message: string;
   span: SourceSpan;
 };
@@ -152,6 +152,28 @@ export function parse(tokens: Token[], file = "<input>"): ParseResult {
 
   // ── Type expressions ──────────────────────────────────────────────────────
 
+  function skipUnsupportedBlock(): void {
+    advance(); // unsupported construct identifier
+    while (!at("EOF") && !at("NEWLINE")) advance();
+    eat("NEWLINE");
+
+    let depth = 1;
+    while (!at("EOF") && depth > 0) {
+      if (at("IF_KW") || at("WHILE_KW") || at("FOR_KW")) {
+        depth++;
+        advance();
+        continue;
+      }
+      if (at("END_KW")) {
+        depth--;
+        advance();
+        continue;
+      }
+      advance();
+    }
+    eat("NEWLINE");
+  }
+
   function parseTypeRef(): TypeRef | undefined {
     skipNewlines();
     const t = peek();
@@ -230,6 +252,19 @@ export function parse(tokens: Token[], file = "<input>"): ParseResult {
       case "EOF":        return null;
       case "END_KW":     return null; // consumed by caller
       case "NEWLINE":    { advance(); return null; }
+      case "IDENTIFIER": {
+        if (t.text === "switch") {
+          addError("PE012", "switch statements are not supported in UR 1.0. This feature is planned for a future version.", t);
+          skipUnsupportedBlock();
+          return null;
+        }
+        if (t.text === "try") {
+          addError("PE013", "try/catch/finally is not supported in UR 1.0. This feature is planned for a future version.", t);
+          skipUnsupportedBlock();
+          return null;
+        }
+        return parseExpressionStatement();
+      }
       default:           return parseExpressionStatement();
     }
   }
