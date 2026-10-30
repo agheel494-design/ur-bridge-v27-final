@@ -89,6 +89,18 @@ describe("semantic — valid programs", () => {
 // SE1001 — undefined symbol (13 of 14 ported)
 // ─────────────────────────────────────────────────────────────────────────────
 
+describe("semantic � SE3003 function value not supported", () => {
+  it("rejects a function identifier used as a value", () => {
+    const src = "function f(): int\n  return 42\nend\nfunction main(): int\n  let h = f\n  return 0\nend\n";
+    expect(codes(src)).toContain("SE3003");
+  });
+
+  it("keeps direct function calls valid", () => {
+    const src = "function f(): int\n  return 42\nend\nfunction main(): int\n  return f()\nend\n";
+    expect(clean(src)).toBe(true);
+  });
+});
+
 describe("semantic — SE1001 undefined symbol", () => {
   it("undefined variable in return", () => expect(codes("function f()\n  return x\nend\n")).toContain(CODES.UNDEFINED_SYMBOL));
   it("undefined variable in if condition", () => expect(codes("function f()\n  if x\n  end\nend\n")).toContain(CODES.UNDEFINED_SYMBOL));

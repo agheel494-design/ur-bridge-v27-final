@@ -430,9 +430,16 @@ class SemanticAnalyzer {
   }
 
   private walkIdentifier(id: Identifier): void {
-    if (id.name === "<error>") return; // recovery placeholder — skip
-    if (!this.scopes.lookup(id.name)) {
+    if (id.name === "<error>") return; // recovery placeholder
+    const sym = this.scopes.lookup(id.name);
+    if (!sym) {
       this.err(CODES.UNDEFINED_SYMBOL, `undefined symbol '${id.name}'`, id.span);
+    } else if (sym.kind === "function") {
+      this.err(
+        CODES.FUNCTION_VALUE_NOT_SUPPORTED,
+        `function '${id.name}' cannot be used as a value; first-class functions are not supported in UR 1.0`,
+        id.span,
+      );
     }
   }
 
