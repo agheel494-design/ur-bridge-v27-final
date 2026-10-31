@@ -173,6 +173,8 @@ function emitInstruction(inst: IRInstruction, slotsById: ReadonlyMap<number, IRL
     }
     case "unop":
       return `  ${cType(inst.type)} ${cValueName(inst.id)} = ${UNOP_C[inst.op]}${cValueName(inst.operand.id)};`;
+    case "int_to_float":
+      return `  ${cType(inst.type)} ${cValueName(inst.id)} = (double)${cValueName(inst.operand.id)};`;
     case "call": {
       // Real fix for CG9001: an argument with a real structSlot (per
       // LANGUAGE_SYNTAX_1_1_SPEC.md §2.5's ratified BY VALUE

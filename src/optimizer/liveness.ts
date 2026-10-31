@@ -36,6 +36,7 @@ function usesOf(inst: IRInstruction): number[] {
   switch (inst.kind) {
     case "binop": return [inst.left.id, inst.right.id];
     case "unop": return [inst.operand.id];
+    case "int_to_float": return [inst.operand.id];
     case "call": return inst.args.map((a: IRValueRef) => a.id);
     case "store": return [inst.value.id];
     case "array_load": return [inst.index.id];

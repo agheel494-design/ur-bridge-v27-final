@@ -39,6 +39,7 @@ class IRBuilder {
   private readonly valueTypes = new Map<number, URType>(); // SSA id -> its URType, for downstream binop resolution
   private readonly varEnv = new Map<string, VarBinding>();  // current binding (ssa or slot) for a variable name
   private readonly varTypes = new Map<string, URType>();    // declared/inferred URType for a variable name
+  private currentFunctionReturnType: URType = T_UNKNOWN;
 
   // ── Multi-block CFG state (Phase 2.6.2) ──────────────────────────────────
   private blocks: IRBasicBlock[] = [];      // finished blocks so far
@@ -92,6 +93,27 @@ class IRBuilder {
 
   private freshId(): number {
     return this.nextId++;
+  }
+
+  private coerceToExpectedType(
+    value: { ref: IRValueRef; type: URType },
+    expectedType: URType,
+    location: SourceLocation,
+  ): { ref: IRValueRef; type: URType } {
+    if (value.type.kind === "Primitive" && value.type.name === "Int" &&
+        expectedType.kind === "Primitive" && expectedType.name === "Float") {
+      const id = this.freshId();
+      this.instructions.push({
+        kind: "int_to_float",
+        id,
+        type: "f64",
+        operand: value.ref,
+        location,
+      });
+      this.valueTypes.set(id, T_FLOAT);
+      return { ref: { id }, type: T_FLOAT };
+    }
+    return value;
   }
 
   private allocBlockId(): number {
@@ -487,8 +509,18 @@ class IRBuilder {
             return { ref: { id: resultId }, type: T_BOOL };
           }
         }
+        const expectedOperandType = resultType.kind === "Primitive" && resultType.name === "Float"
+          ? T_FLOAT
+          : undefined;
+        const widenedLeft = expectedOperandType
+          ? this.coerceToExpectedType(left, expectedOperandType, location)
+          : left;
+        const widenedRight = expectedOperandType
+          ? this.coerceToExpectedType(right, expectedOperandType, location)
+          : right;
+
         const id = this.freshId();
-        this.instructions.push({ kind: "binop", id, type: toIRType(resultType), op, left: left.ref, right: right.ref, location });
+        this.instructions.push({ kind: "binop", id, type: toIRType(resultType), op, left: widenedLeft.ref, right: widenedRight.ref, location });
         this.valueTypes.set(id, resultType);
         return { ref: { id }, type: resultType };
       }
@@ -601,7 +633,8 @@ class IRBuilder {
         const sig = this.functionSignatures.get(calleeName);
         if (sig) {
           const args: IRValueRef[] = [];
-          for (const a of expr.args) {
+          for (let i = 0; i < expr.args.length; i++) {
+            const a = expr.args[i]!;
             // Array-by-reference argument support (Priority 3
             // Stabilization Sprint): scoped precisely to THIS position
             // (a real function-call argument) - a bare array-identifier
@@ -619,7 +652,11 @@ class IRBuilder {
             }
             const lowered = this.lowerExpr(a);
             if (!lowered) return null;
-            args.push(lowered.ref);
+            const expectedType = sig.paramTypes[i];
+            const value = expectedType
+              ? this.coerceToExpectedType(lowered, expectedType, location)
+              : lowered;
+            args.push(value.ref);
           }
           // Struct-return support (Priority 2, Solution A — ratified:
           // the callee genuinely returns the struct by value, same
@@ -1111,6 +1148,7 @@ class IRBuilder {
           if (!result) return "failed";
           return "continue";
         }
+        const declaredScalarType = stmt.type ? resolveTypeRef(stmt.type) : undefined;
         const lowered = this.lowerExpr(stmt.initializer);
         if (!lowered) return "failed";
         if (lowered.ref.arraySlot !== undefined) {
@@ -1118,7 +1156,10 @@ class IRBuilder {
           this.varTypes.set(stmt.name, lowered.type);
           return "continue";
         }
-        this.assignVar(stmt.name, lowered, location);
+        const value = declaredScalarType
+          ? this.coerceToExpectedType(lowered, declaredScalarType, location)
+          : lowered;
+        this.assignVar(stmt.name, value, location);
         return "continue";
       }
       case "Assignment": {
@@ -1550,7 +1591,8 @@ class IRBuilder {
         if (stmt.value) {
           const lowered = this.lowerExpr(stmt.value);
           if (!lowered) return "failed";
-          this.terminator = { kind: "return", value: lowered.ref, location };
+          const value = this.coerceToExpectedType(lowered, this.currentFunctionReturnType, location);
+          this.terminator = { kind: "return", value: value.ref, location };
         } else {
           this.terminator = { kind: "return_void", location };
         }
@@ -1600,6 +1642,7 @@ class IRBuilder {
     this.nextBlockId = 1;
     this.locals = [];
     this.nextSlotId = 0;
+    this.currentFunctionReturnType = returnType;
 
     const params = fn.params.map((p, i) => {
       const paramUrType = paramTypes[i]!;

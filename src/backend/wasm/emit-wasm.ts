@@ -36,7 +36,7 @@ import { WASM_CODES, WasmUnsupportedError } from "./wasm-diagnostics.js";
 import { detectRecursion } from "./call-graph.js";
 import { encodeArrayElementLoad, encodeArrayElementStore, encodeArrayRefElementLoad, encodeArrayRefElementStore, encodeArrayAllocation, encodeArrayHeaderStore, encodeArrayLengthLoad, encodeMemorySection, encodeGlobalSection, encodeBoundsCheck } from "./array-memory.js";
 import { encodeStructFieldLoad, encodeStructFieldStore, encodeStructAllocation } from "./struct-memory.js";
-import { OPCODE_END, OPCODE_GLOBAL_GET, OPCODE_GLOBAL_SET, OPCODE_I32_ADD, OPCODE_I32_CONST, OPCODE_I32_MUL, OPCODE_I32_OR, OPCODE_I32_WRAP_I64, OPCODE_I64_CONST, OPCODE_I64_GE_S, OPCODE_I64_LOAD, OPCODE_I64_LT_S, OPCODE_I64_STORE, OPCODE_IF, OPCODE_LOCAL_SET, OPCODE_UNREACHABLE, OPCODE_F64_ADD, OPCODE_F64_SUB, OPCODE_F64_MUL } from "./wasm-opcodes.js";
+import { OPCODE_END, OPCODE_GLOBAL_GET, OPCODE_GLOBAL_SET, OPCODE_I32_ADD, OPCODE_I32_CONST, OPCODE_I32_MUL, OPCODE_I32_OR, OPCODE_I32_WRAP_I64, OPCODE_I64_CONST, OPCODE_I64_GE_S, OPCODE_I64_LOAD, OPCODE_I64_LT_S, OPCODE_I64_STORE, OPCODE_IF, OPCODE_LOCAL_SET, OPCODE_UNREACHABLE, OPCODE_F64_ADD, OPCODE_F64_SUB, OPCODE_F64_MUL, OPCODE_F64_CONVERT_I64_S } from "./wasm-opcodes.js";
 
 // ── WASM binary format constants (module-private — no magic numbers scattered through the emitter body) ──
 
@@ -1064,7 +1064,7 @@ function getMaterializedIds(fn: IRFunction): ReadonlyMap<number, number> {
       if (!instructionHasResultId(inst)) continue;
       const fanOut = countReferencesWithinBlock(inst.id, block);
       const isMultiUseEligible = fanOut > 1
-        && (inst.kind === "const" || inst.kind === "load" || inst.kind === "binop" || inst.kind === "unop" || inst.kind === "call" || inst.kind === "array_load")
+        && (inst.kind === "const" || inst.kind === "load" || inst.kind === "binop" || inst.kind === "unop" || inst.kind === "int_to_float" || inst.kind === "call" || inst.kind === "array_load")
         && (inst.type === "i64" || inst.type === "f64" || inst.type === "string" || inst.type === "array_ref");
       // V2-M2's own original rule (hasStatements-gated, i64-only
       // const/load/binop) is preserved exactly, as its own separate
@@ -1383,6 +1383,10 @@ function encodeExprRaw(id: number, instructionsById: ReadonlyMap<number, IRInstr
     // Unreachable given validateScope() already ran — defensive only.
     throw new WasmUnsupportedError({ code: WASM_CODES.UNSUPPORTED_INSTRUCTION, functionName: fn.sourceName, message: "internal error: expected a validated 'neg' or 'not' unop" });
   }
+  if (inst.kind === "int_to_float") {
+    const operandExpr = encodeExpr(inst.operand.id, instructionsById, functionIndexByName, fn, localIndexBySlotId, arrayBaseLocalIndexBySlotId, structBaseLocalIndexBySlotId);
+    return concatBytes(operandExpr, OPCODE_F64_CONVERT_I64_S);
+  }
   if (inst.kind === "call") {
     const funcIndex = functionIndexByName.get(inst.callee);
     if (funcIndex === undefined) {
@@ -1615,6 +1619,7 @@ function countReferencesWithinBlock(id: number, block: IRBasicBlock): number {
       if (inst.right.id === id) count++;
     }
     if (inst.kind === "unop" && inst.operand.id === id) count++;
+    if (inst.kind === "int_to_float" && inst.operand.id === id) count++;
     if (inst.kind === "array_load" && inst.index.id === id) count++;
   }
   if (block.terminator.kind === "return" && block.terminator.value.id === id) count++;

@@ -41,3 +41,4 @@ export const OPCODE_UNREACHABLE = 0x00;
 export const OPCODE_F64_ADD = 0xa0;
 export const OPCODE_F64_SUB = 0xa1;
 export const OPCODE_F64_MUL = 0xa2;
+export const OPCODE_F64_CONVERT_I64_S = 0xb9;

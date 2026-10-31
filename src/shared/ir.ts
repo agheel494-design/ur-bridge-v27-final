@@ -241,6 +241,13 @@ export type IRInstruction =
       readonly location: SourceLocation;
     }
   | {
+      readonly kind: "int_to_float";
+      readonly id: number;
+      readonly type: "f64";
+      readonly operand: IRValueRef;
+      readonly location: SourceLocation;
+    }
+  | {
       readonly kind: "call";
       readonly id: number;
       readonly type: IRType;

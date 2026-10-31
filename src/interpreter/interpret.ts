@@ -921,6 +921,11 @@ class ${className}Main {
         ssa.set(inst.id, inst.op === "neg" ? (typeof v === "bigint" ? -v : -(v as number)) : !(v as boolean));
         return;
       }
+      case "int_to_float": {
+        const v = ssa.get(inst.operand.id);
+        ssa.set(inst.id, Number(v as bigint));
+        return;
+      }
       case "call": {
         // Phase 3R-A (per direct instruction): compound-value arguments
         // (arraySlot/structSlot) carry a real, existing IRValueRef shape

@@ -477,6 +477,28 @@ describe("WASM Backend 3.1A.3 — ratified rejections: recursion and unresolved 
   });
 });
 
+  it("encodes IR int_to_float as valid WebAssembly", () => {
+    const loc = { file: "t", start: { line: 1, column: 1 }, end: { line: 1, column: 1 } };
+    const module = {
+      moduleName: "m", externs: [],
+      functions: [{
+        qualifiedName: "ur_m_main", sourceName: "main", params: [], returnType: "f64" as const, entryBlock: 0, location: loc,
+        locals: [],
+        blocks: [{
+          id: 0, label: "entry",
+          instructions: [
+            { kind: "const" as const, id: 0, type: "i64" as const, value: { kind: "const_int" as const, value: 3n }, location: loc },
+            { kind: "int_to_float" as const, id: 1, type: "f64" as const, operand: { id: 0 }, location: loc },
+          ],
+          terminator: { kind: "return" as const, value: { id: 1 }, location: loc },
+        }],
+      }],
+    };
+
+    const wasm = emitWasmModule(module);
+    expect(WebAssembly.validate(wasm)).toBe(true);
+  });
+
 describe("WASM Backend 3.1A.3 - function DECLARATION ORDER independence (per explicit review request)", () => {
   // Confirms functionIndexByName resolves calls correctly regardless
   // of the order functions appear in the module - the WASM function

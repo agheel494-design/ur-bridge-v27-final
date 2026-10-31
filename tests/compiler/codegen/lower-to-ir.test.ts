@@ -38,6 +38,30 @@ function findFn(module: IRModule, name: string) {
 
 // ── In-scope: literals and basic function structure ───────────────────────────
 
+describe("lower-to-ir - numeric widening at return boundary", () => {
+  it("returns an f64 SSA value when an int result is returned from a float function", () => {
+    const m = lowerOk(
+      "function source(): int\n" +
+      "  return 3\n" +
+      "end\n" +
+      "function widened(): float\n" +
+      "  return source()\n" +
+      "end\n",
+    );
+
+    const fn = findFn(m, "widened");
+    const block = fn.blocks.find(b => b.terminator.kind === "return");
+    expect(block).toBeDefined();
+    if (!block || block.terminator.kind !== "return") return;
+
+    const returnedId = block.terminator.value.id;
+    const producer = fn.blocks.flatMap(b => b.instructions).find(i => "id" in i && i.id === returnedId);
+    expect(producer).toBeDefined();
+    if (!producer || !("type" in producer)) return;
+    expect(producer.type).toBe("f64");
+  });
+});
+
 describe("lower-to-ir — basic function structure", () => {
   it("empty-bodied function with a return literal produces one block ending in return", () => {
     const m = lowerOk("function f(): int\n  return 42\nend\n");
@@ -126,6 +150,28 @@ describe("lower-to-ir — variables", () => {
 
 // ── In-scope: arithmetic ────────────────────────────────────────────────────────
 
+describe("lower-to-ir - numeric widening in mixed arithmetic", () => {
+  it("widens an int operand to f64 before an f64 binary operation", () => {
+    const m = lowerOk(
+      "function main(): float\n" +
+      "  return 1 + 2.5\n" +
+      "end\n",
+    );
+
+    const fn = findFn(m, "main");
+    const allInsts = fn.blocks.flatMap(b => b.instructions);
+    const binop = allInsts.find(i => i.kind === "binop");
+    expect(binop).toBeDefined();
+    if (!binop || binop.kind !== "binop") return;
+    expect(binop.type).toBe("f64");
+
+    const left = allInsts.find(i => "id" in i && i.id === binop.left.id);
+    const right = allInsts.find(i => "id" in i && i.id === binop.right.id);
+    expect(left && "type" in left ? left.type : undefined).toBe("f64");
+    expect(right && "type" in right ? right.type : undefined).toBe("f64");
+  });
+});
+
 describe("lower-to-ir — arithmetic and logical operators", () => {
   const cases: Array<[string, string, string]> = [
     ["+", "add", "int"], ["-", "sub", "int"], ["*", "mul", "int"], ["/", "div", "float"], ["%", "mod", "int"],
@@ -172,6 +218,35 @@ describe("lower-to-ir — arithmetic and logical operators", () => {
 });
 
 // ── In-scope: function calls ────────────────────────────────────────────────────
+
+describe("lower-to-ir - numeric widening at call boundary", () => {
+  it("passes an f64 SSA value when an int result is passed to a float parameter", () => {
+    const m = lowerOk(
+      "function source(): int\n" +
+      "  return 3\n" +
+      "end\n" +
+      "function take(x: float): float\n" +
+      "  return x\n" +
+      "end\n" +
+      "function main(): int\n" +
+      "  let y: float = take(source())\n" +
+      "  return 0\n" +
+      "end\n",
+    );
+
+    const fn = findFn(m, "main");
+    const allInsts = fn.blocks.flatMap(b => b.instructions);
+    const takeFn = findFn(m, "take");
+    const takeCall = allInsts.find(i => i.kind === "call" && i.callee === takeFn.qualifiedName);
+    expect(takeCall).toBeDefined();
+    if (!takeCall || takeCall.kind !== "call") return;
+    const argId = takeCall.args[0]!.id;
+    const producer = allInsts.find(i => "id" in i && i.id === argId);
+    expect(producer).toBeDefined();
+    if (!producer || !("type" in producer)) return;
+    expect(producer.type).toBe("f64");
+  });
+});
 
 describe("lower-to-ir — function calls", () => {
   it("call with zero args", () => {

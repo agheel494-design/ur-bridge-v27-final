@@ -223,6 +223,10 @@ export function validateBlockInstructions(block: IRBasicBlock, fn: IRFunction, k
       useCounts.set(refIdentity(inst.operand), (useCounts.get(refIdentity(inst.operand)) ?? 0) + 1);
       continue;
     }
+    if (inst.kind === "int_to_float") {
+      useCounts.set(refIdentity(inst.operand), (useCounts.get(refIdentity(inst.operand)) ?? 0) + 1);
+      continue;
+    }
     if (inst.kind === "call") {
       // Step 5 (per WASM_FUNCTION_PARAMETERS_DESIGN.md, executing the
       // pre-existing TODO's own plan): calls to real UR functions
