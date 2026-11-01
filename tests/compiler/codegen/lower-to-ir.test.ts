@@ -133,6 +133,25 @@ describe("lower-to-ir - declared scalar type preservation", () => {
   });
 });
 
+describe("lower-to-ir - conditional expression", () => {
+  it("lowers if-as-expression to valid CFG with a resulting value", () => {
+    const m = lowerOk(
+      "function main(): int\n" +
+      "  let x = if true\n" +
+      "    10\n" +
+      "  else\n" +
+      "    20\n" +
+      "  end\n" +
+      "  return x\n" +
+      "end\n",
+    );
+
+    const fn = findFn(m, "main");
+    expect(fn.blocks.length).toBeGreaterThan(1);
+    expect(checkModuleInvariants(m)).toEqual([]);
+  });
+});
+
 describe("lower-to-ir — literals", () => {
   it("int literal", () => {
     const m = lowerOk("function f(): int\n  return 42\nend\n");

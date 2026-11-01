@@ -968,6 +968,92 @@ class IRBuilder {
         this.valueTypes.set(id, elementType);
         return { ref: { id }, type: elementType };
       }
+      case "ConditionalExpression": {
+        const cond = this.lowerExpr(expr.condition);
+        if (!cond) return null;
+
+        const thenBlockId = this.allocBlockId();
+        const elseBlockId = this.allocBlockId();
+        const mergeBlockId = this.allocBlockId();
+
+        this.finishBlockAndSwitchTo(
+          {
+            kind: "cond_branch",
+            condition: cond.ref,
+            thenTarget: thenBlockId,
+            elseTarget: elseBlockId,
+            location,
+          },
+          thenBlockId,
+          "cond.then",
+        );
+
+        const thenValue = this.lowerExpr(expr.consequent);
+        if (!thenValue) return null;
+        const thenInstructions = this.instructions;
+        this.instructions = [];
+
+        const thenId = this.currentBlockId;
+        const thenLabel = this.currentBlockLabel;
+
+        this.currentBlockId = elseBlockId;
+        this.currentBlockLabel = "cond.else";
+
+        const elseValue = this.lowerExpr(expr.alternate);
+        if (!elseValue) return null;
+        const elseInstructions = this.instructions;
+        this.instructions = [];
+
+        let resultType: URType;
+        if (
+          thenValue.type.kind === "Primitive" &&
+          thenValue.type.name === "Int" &&
+          elseValue.type.kind === "Primitive" &&
+          elseValue.type.name === "Float"
+        ) {
+          resultType = T_FLOAT;
+        } else if (
+          thenValue.type.kind === "Primitive" &&
+          thenValue.type.name === "Float" &&
+          elseValue.type.kind === "Primitive" &&
+          elseValue.type.name === "Int"
+        ) {
+          resultType = T_FLOAT;
+        } else if (toIRType(thenValue.type) === toIRType(elseValue.type)) {
+          resultType = thenValue.type;
+        } else {
+          this.error(CODEGEN_CODES.UNSUPPORTED_CONSTRUCT, "conditional-expression branches require a common IR-representable type", location);
+          return null;
+        }
+
+        const resultIRType = toIRType(resultType);
+        if (resultIRType === "void") {
+          this.error(CODEGEN_CODES.UNSUPPORTED_CONSTRUCT, "conditional-expression result type is not representable in this IR phase", location);
+          return null;
+        }
+
+        const resultSlot = this.nextSlotId++;
+        this.locals.push({ id: resultSlot, name: `__conditional_${resultSlot}`, type: resultIRType });
+
+        this.instructions = thenInstructions;
+        const coercedThen = this.coerceToExpectedType(thenValue, resultType, location);
+        this.instructions.push({ kind: "store", slot: resultSlot, value: coercedThen.ref, location });
+        this.blocks.push({ id: thenId, label: thenLabel, instructions: this.instructions, terminator: { kind: "branch", target: mergeBlockId, location } });
+
+        this.instructions = elseInstructions;
+        const coercedElse = this.coerceToExpectedType(elseValue, resultType, location);
+        this.instructions.push({ kind: "store", slot: resultSlot, value: coercedElse.ref, location });
+        this.blocks.push({ id: elseBlockId, label: "cond.else", instructions: this.instructions, terminator: { kind: "branch", target: mergeBlockId, location } });
+
+        this.currentBlockId = mergeBlockId;
+        this.currentBlockLabel = "cond.merge";
+        this.instructions = [];
+
+        const id = this.freshId();
+        this.instructions.push({ kind: "load", id, type: resultIRType, slot: resultSlot, location });
+        this.valueTypes.set(id, resultType);
+        return { ref: { id }, type: resultType };
+      }
       default:
         this.error(CODEGEN_CODES.UNSUPPORTED_CONSTRUCT, `expression kind '${expr.kind}' is not supported in this Level 2 phase (scope: literals, identifiers, binary/unary ops, direct calls)`, location);
         return null;
