@@ -94,6 +94,45 @@ describe("lower-to-ir — basic function structure", () => {
 
 // ── In-scope: literals ────────────────────────────────────────────────────────
 
+describe("lower-to-ir - declared scalar type preservation", () => {
+  it("preserves declared float type when an int initializer is promoted to a CFG slot", () => {
+    const m = lowerOk(
+      "function main(): int\n" +
+      "  let x: float = 1\n" +
+      "  if true\n" +
+      "    x = 2.5\n" +
+      "  end\n" +
+      "  return 0\n" +
+      "end\n",
+    );
+
+    const fn = findFn(m, "main");
+    const xSlot = fn.locals.find(s => s.name === "x");
+    expect(xSlot).toBeDefined();
+    expect(xSlot?.type).toBe("f64");
+  });
+
+  it("preserves declared float type when an int-returning call is promoted to a CFG slot", () => {
+    const m = lowerOk(
+      "function source(): int\n" +
+      "  return 3\n" +
+      "end\n" +
+      "function main(): int\n" +
+      "  let x: float = source()\n" +
+      "  if true\n" +
+      "    x = 2.5\n" +
+      "  end\n" +
+      "  return 0\n" +
+      "end\n",
+    );
+
+    const fn = findFn(m, "main");
+    const xSlot = fn.locals.find(s => s.name === "x");
+    expect(xSlot).toBeDefined();
+    expect(xSlot?.type).toBe("f64");
+  });
+});
+
 describe("lower-to-ir — literals", () => {
   it("int literal", () => {
     const m = lowerOk("function f(): int\n  return 42\nend\n");
