@@ -2298,17 +2298,25 @@ function cmdRun(filePath: string | undefined): number {
   const compiled = compileToIR(filePath);
   if (!compiled) return 1;
 
-  const stdinLines = process.stdin.isTTY
-    ? []
-    : readFileSync(0, "utf8").split(/\r?\n/);
+  let stdinLines: string[] | null = null;
   let stdinIndex = 0;
+  const readLine = (): string => {
+    if (stdinLines === null) {
+      try {
+        stdinLines = process.stdin.isTTY ? [] : readFileSync(0, "utf8").split(/\r?\n/);
+      } catch {
+        stdinLines = [];
+      }
+    }
+    return stdinLines[stdinIndex++] ?? "";
+  };
 
   const result = interpretModule(
     compiled.ir,
     "main",
     undefined,
     { timeouts: compiled.friTimeouts },
-    { readLine: () => stdinLines[stdinIndex++] ?? "" }
+    { readLine }
   );
 
   if (result.stdout) process.stdout.write(result.stdout);
@@ -2376,16 +2384,26 @@ function revive(value) {
   return out;
 }
 const ir = revive(${JSON.stringify(compiled.ir, replaceBigInt)});
-const stdinLines = process.stdin.isTTY
-  ? []
-  : readFileSync(0, "utf8").replaceAll(String.fromCharCode(13), "").split(String.fromCharCode(10));
+let stdinLines = null;
 let stdinIndex = 0;
+const readLine = () => {
+  if (stdinLines === null) {
+    try {
+      stdinLines = process.stdin.isTTY
+        ? []
+        : readFileSync(0, "utf8").replaceAll(String.fromCharCode(13), "").split(String.fromCharCode(10));
+    } catch {
+      stdinLines = [];
+    }
+  }
+  return stdinLines[stdinIndex++] ?? "";
+};
 const result = interpretModule(
   ir,
   "main",
   undefined,
   ${JSON.stringify({ timeouts: compiled.friTimeouts })},
-  { readLine: () => stdinLines[stdinIndex++] ?? "" }
+  { readLine }
 );
 if (result.stdout) process.stdout.write(result.stdout);
 if (result.stderr) process.stderr.write(result.stderr);
