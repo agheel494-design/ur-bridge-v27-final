@@ -234,13 +234,11 @@ describe("lower-to-ir — arithmetic and logical operators", () => {
   const cases: Array<[string, string, string]> = [
     ["+", "add", "int"], ["-", "sub", "int"], ["*", "mul", "int"], ["/", "div", "float"], ["%", "mod", "int"],
     ["==", "eq", "bool"], ["!=", "neq", "bool"], ["<", "lt", "bool"], ["<=", "lte", "bool"], [">", "gt", "bool"], [">=", "gte", "bool"],
-    ["&&", "and", "bool"], ["||", "or", "bool"],
+
   ];
   for (const [urOp, irOp, retType] of cases) {
     it(`'${urOp}' lowers to binop '${irOp}'`, () => {
-      const src = urOp === "&&" || urOp === "||"
-        ? `function f(): bool\n  return true ${urOp} false\nend\n`
-        : `function f(): ${retType}\n  return 1 ${urOp} 2\nend\n`;
+      const src = `function f(): ${retType}\n  return 1 ${urOp} 2\nend\n`;
       const m = lowerOk(src);
       const fn = findFn(m, "f");
       const binop = fn.blocks[0]!.instructions.find(i => i.kind === "binop");
@@ -248,7 +246,14 @@ describe("lower-to-ir — arithmetic and logical operators", () => {
       if (binop?.kind === "binop") expect(binop.op).toBe(irOp);
     });
   }
-
+  it("'&&' lowers to short-circuit CFG", () => {
+    const m = lowerOk(`function f(): bool
+  return true && false
+end
+`);
+    const fn = findFn(m, "f");
+    expect(fn.blocks[0]!.terminator.kind).toBe("cond_branch");
+  });
   it("unary negation lowers to unop 'neg'", () => {
     const m = lowerOk("function f(): int\n  return -5\nend\n");
     const fn = findFn(m, "f");
@@ -256,7 +261,14 @@ describe("lower-to-ir — arithmetic and logical operators", () => {
     expect(unop).toBeDefined();
     if (unop?.kind === "unop") expect(unop.op).toBe("neg");
   });
-
+  it("'||' lowers to short-circuit CFG", () => {
+    const m = lowerOk(`function f(): bool
+  return true || false
+end
+`);
+    const fn = findFn(m, "f");
+    expect(fn.blocks[0]!.terminator.kind).toBe("cond_branch");
+  });
   it("unary not lowers to unop 'not'", () => {
     const m = lowerOk("function f(): bool\n  return !true\nend\n");
     const fn = findFn(m, "f");

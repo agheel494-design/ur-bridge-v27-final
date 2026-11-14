@@ -449,8 +449,90 @@ class IRBuilder {
       }
       case "BinaryExpression": {
         const left = this.lowerExpr(expr.left);
+        if (!left) return null;
+
+        if (expr.operator === "&&" || expr.operator === "||") {
+          const rhsBlockId = this.allocBlockId();
+          const shortCircuitBlockId = this.allocBlockId();
+          const mergeBlockId = this.allocBlockId();
+
+          const resultSlotId = this.nextSlotId++;
+          this.locals.push({
+            id: resultSlotId,
+            name: `logical_tmp_${resultSlotId}`,
+            type: "bool",
+          });
+
+          const thenTarget =
+            expr.operator === "&&" ? rhsBlockId : shortCircuitBlockId;
+          const elseTarget =
+            expr.operator === "&&" ? shortCircuitBlockId : rhsBlockId;
+
+          this.finishBlockAndSwitchTo(
+            {
+              kind: "cond_branch",
+              condition: left.ref,
+              thenTarget,
+              elseTarget,
+              location,
+            },
+            rhsBlockId,
+            "logical_rhs",
+          );
+
+          const right = this.lowerExpr(expr.right);
+          if (!right) return null;
+
+          this.instructions.push({
+            kind: "store",
+            slot: resultSlotId,
+            value: right.ref,
+            location,
+          });
+          this.finishBlockAndSwitchTo(
+            { kind: "branch", target: mergeBlockId, location },
+            shortCircuitBlockId,
+            "logical_short_circuit",
+          );
+
+          const shortCircuitId = this.freshId();
+          this.instructions.push({
+            kind: "const",
+            id: shortCircuitId,
+            type: "bool",
+            value: {
+              kind: "const_bool",
+              value: expr.operator === "||",
+            },
+            location,
+          });
+          this.instructions.push({
+            kind: "store",
+            slot: resultSlotId,
+            value: { id: shortCircuitId },
+            location,
+          });
+          this.finishBlockAndSwitchTo(
+            { kind: "branch", target: mergeBlockId, location },
+            mergeBlockId,
+            "logical_merge",
+          );
+
+          const resultId = this.freshId();
+          this.instructions.push({
+            kind: "load",
+            id: resultId,
+            type: "bool",
+            slot: resultSlotId,
+            location,
+          });
+          this.valueTypes.set(resultId, T_BOOL);
+          return { ref: { id: resultId }, type: T_BOOL };
+        }
+
         const right = this.lowerExpr(expr.right);
-        if (!left || !right) return null;
+        if (!right) return null;
+
         const op = BINOP_MAP[expr.operator];
         if (!op) {
           this.error(CODEGEN_CODES.UNSUPPORTED_CONSTRUCT, `unsupported binary operator '${expr.operator}' in this Level 2 phase`, location);
