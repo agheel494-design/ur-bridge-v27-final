@@ -22,6 +22,7 @@ export const OPCODE_I32_WRAP_I64 = 0xa7;
 // array-element opcodes below use).
 export const OPCODE_I32_LOAD = 0x28;
 export const OPCODE_I32_STORE = 0x36;
+export const OPCODE_I32_STORE8 = 0x3a;
 export const OPCODE_I64_CONST = 0x42;
 export const OPCODE_I64_GE_S = 0x59;
 export const OPCODE_I64_LOAD = 0x29;

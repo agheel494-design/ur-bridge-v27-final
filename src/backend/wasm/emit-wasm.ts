@@ -36,7 +36,7 @@ import { WASM_CODES, WasmUnsupportedError } from "./wasm-diagnostics.js";
 import { detectRecursion } from "./call-graph.js";
 import { encodeArrayElementLoad, encodeArrayElementStore, encodeArrayRefElementLoad, encodeArrayRefElementStore, encodeArrayAllocation, encodeArrayHeaderStore, encodeArrayLengthLoad, encodeMemorySection, encodeGlobalSection, encodeBoundsCheck } from "./array-memory.js";
 import { encodeStructFieldLoad, encodeStructFieldStore, encodeStructAllocation } from "./struct-memory.js";
-import { OPCODE_END, OPCODE_GLOBAL_GET, OPCODE_GLOBAL_SET, OPCODE_I32_ADD, OPCODE_I32_CONST, OPCODE_I32_MUL, OPCODE_I32_OR, OPCODE_I32_WRAP_I64, OPCODE_I64_CONST, OPCODE_I64_GE_S, OPCODE_I64_LOAD, OPCODE_I64_LT_S, OPCODE_I64_STORE, OPCODE_IF, OPCODE_LOCAL_SET, OPCODE_UNREACHABLE, OPCODE_F64_ADD, OPCODE_F64_SUB, OPCODE_F64_MUL, OPCODE_F64_CONVERT_I64_S } from "./wasm-opcodes.js";
+import { OPCODE_END, OPCODE_GLOBAL_GET, OPCODE_GLOBAL_SET, OPCODE_I32_ADD, OPCODE_I32_CONST, OPCODE_I32_MUL, OPCODE_I32_OR, OPCODE_I32_WRAP_I64, OPCODE_I32_STORE8, OPCODE_I64_CONST, OPCODE_I64_GE_S, OPCODE_I64_LOAD, OPCODE_I64_LT_S, OPCODE_I64_STORE, OPCODE_IF, OPCODE_LOCAL_SET, OPCODE_UNREACHABLE, OPCODE_F64_ADD, OPCODE_F64_SUB, OPCODE_F64_MUL, OPCODE_F64_CONVERT_I64_S } from "./wasm-opcodes.js";
 
 // ── WASM binary format constants (module-private — no magic numbers scattered through the emitter body) ──
 
@@ -76,6 +76,7 @@ const OPCODE_I64_LE_S = 0x57;
 const OPCODE_ELSE = 0x05;
 const OPCODE_CALL = 0x10;
 const OPCODE_LOCAL_GET = 0x20;
+const MEMARG_ALIGN1_OFFSET0 = new Uint8Array([0x00, 0x00]);
 const OPCODE_BLOCK = 0x02;
 const OPCODE_LOOP = 0x03;
 const OPCODE_BR = 0x0c;
@@ -167,8 +168,8 @@ function buildFunctionTypes(functions: readonly IRFunction[]): { typeEntries: Ui
     let index = typeKeyToIndex.get(key);
     if (index === undefined) {
       index = typeEntries.length;
-      const paramValTypes = fn.params.map(p => new Uint8Array([isArrayParam(p) ? VALTYPE_I32 : (p.type === "f64" ? VALTYPE_F64 : VALTYPE_I64)]));
-      const resultValTypes = fn.returnType === "void" ? [] : [new Uint8Array([returnsArray ? VALTYPE_I32 : (fn.returnType === "f64" ? VALTYPE_F64 : VALTYPE_I64)])];
+      const paramValTypes = fn.params.map(p => new Uint8Array([isArrayParam(p) || p.type === "string" ? VALTYPE_I32 : (p.type === "f64" ? VALTYPE_F64 : VALTYPE_I64)]));
+      const resultValTypes = fn.returnType === "void" ? [] : [new Uint8Array([returnsArray || fn.returnType === "string" ? VALTYPE_I32 : (fn.returnType === "f64" ? VALTYPE_F64 : VALTYPE_I64)])];
       typeEntries.push(concatBytes(FUNCTYPE, encodeVector(paramValTypes), encodeVector(resultValTypes)));
       typeKeyToIndex.set(key, index);
     }
@@ -1063,6 +1064,14 @@ function getMaterializedIds(fn: IRFunction): ReadonlyMap<number, number> {
       // kinds), so skipping them here is behaviour-identical.
       if (!instructionHasResultId(inst)) continue;
       const fanOut = countReferencesWithinBlock(inst.id, block);
+      if (inst.kind === "const" && inst.value.kind === "const_string") {
+  materializedIds.set(
+    inst.id,
+    STRING_MATERIALIZED_BASE + nextStringMaterialized,
+  );
+  nextStringMaterialized++;
+  continue;
+}
       const isMultiUseEligible = fanOut > 1
         && (inst.kind === "const" || inst.kind === "load" || inst.kind === "binop" || inst.kind === "unop" || inst.kind === "int_to_float" || inst.kind === "call" || inst.kind === "array_load")
         && (inst.type === "i64" || inst.type === "f64" || inst.type === "string" || inst.type === "array_ref");
@@ -1648,13 +1657,71 @@ function encodeStatements(block: IRBasicBlock, instructionsById: ReadonlyMap<num
     // B-1 Gate (type-only): an instruction without a result id (store/
     // array_store/field_store) is never a key of materializedIds, so the
     // added guard does not change which instructions take this path.
-    if (instructionHasResultId(inst) && materializedIds.has(inst.id)) {
-      const scratchIndex = resolveMaterializedLocalIndex(materializedIds.get(inst.id)!, fn);
-      parts.push(encodeExprRaw(inst.id, instructionsById, functionIndexByName, fn, localIndexBySlotId, arrayBaseLocalIndexBySlotId, structBaseLocalIndexBySlotId));
-      parts.push(new Uint8Array([OPCODE_LOCAL_SET]));
+     if (instructionHasResultId(inst) && materializedIds.has(inst.id)) {
+  const scratchIndex = resolveMaterializedLocalIndex(
+    materializedIds.get(inst.id)!,
+    fn,
+  );
+
+  if (inst.kind === "const" && inst.value.kind === "const_string") {
+    const bytes = new TextEncoder().encode(inst.value.value);
+    const allocationSize = 8 + bytes.length;
+
+    // Capture the current shared bump pointer as this string's base.
+    parts.push(new Uint8Array([OPCODE_GLOBAL_GET]));
+    parts.push(encodeULEB128(bumpGlobalIndex));
+    parts.push(new Uint8Array([OPCODE_LOCAL_SET]));
+    parts.push(encodeULEB128(scratchIndex));
+
+    // Advance the shared bump pointer by header + UTF-8 payload.
+    parts.push(new Uint8Array([OPCODE_GLOBAL_GET]));
+    parts.push(encodeULEB128(bumpGlobalIndex));
+    parts.push(new Uint8Array([OPCODE_I32_CONST]));
+    parts.push(encodeSLEB128(BigInt(allocationSize)));
+    parts.push(new Uint8Array([OPCODE_I32_ADD]));
+    parts.push(new Uint8Array([OPCODE_GLOBAL_SET]));
+    parts.push(encodeULEB128(bumpGlobalIndex));
+
+    // String ABI header: i64 UTF-8 byte length at base.
+    parts.push(new Uint8Array([OPCODE_LOCAL_GET]));
+    parts.push(encodeULEB128(scratchIndex));
+    parts.push(new Uint8Array([OPCODE_I64_CONST]));
+    parts.push(encodeSLEB128(BigInt(bytes.length)));
+    parts.push(new Uint8Array([OPCODE_I64_STORE, 0x03, 0x00]));
+
+    // String ABI payload: UTF-8 bytes start at base + 8.
+    for (let i = 0; i < bytes.length; i++) {
+      parts.push(new Uint8Array([OPCODE_LOCAL_GET]));
       parts.push(encodeULEB128(scratchIndex));
-      continue;
+      parts.push(new Uint8Array([OPCODE_I32_CONST]));
+      parts.push(encodeSLEB128(BigInt(8 + i)));
+      parts.push(new Uint8Array([OPCODE_I32_ADD]));
+
+      parts.push(new Uint8Array([OPCODE_I32_CONST]));
+      parts.push(encodeSLEB128(BigInt(bytes[i]!)));
+
+      parts.push(new Uint8Array([OPCODE_I32_STORE8]));
+      parts.push(MEMARG_ALIGN1_OFFSET0);
     }
+
+    continue;
+  }
+
+  parts.push(
+    encodeExprRaw(
+      inst.id,
+      instructionsById,
+      functionIndexByName,
+      fn,
+      localIndexBySlotId,
+      arrayBaseLocalIndexBySlotId,
+      structBaseLocalIndexBySlotId,
+    ),
+  );
+  parts.push(new Uint8Array([OPCODE_LOCAL_SET]));
+  parts.push(encodeULEB128(scratchIndex));
+  continue;
+}
     if (inst.kind === "store") {
       const localIndex = localIndexBySlotId.get(inst.slot);
       if (localIndex === undefined) {

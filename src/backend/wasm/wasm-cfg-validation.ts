@@ -78,15 +78,17 @@ export function validateBlockInstructions(block: IRBasicBlock, fn: IRFunction, k
   const allowStructAccess = knownStructSlotIds.size > 0;
   for (const inst of block.instructions) {
     if (inst.kind === "const") {
-      // V2-M5 (Gate authorized, narrow scope): const_float now also
-      // accepted, alongside the existing const_int - const_bool and
-      // const_string remain rejected exactly as before (both are
-      // separate, standing, unauthorized Findings - not touched here).
-      if (inst.value.kind !== "const_int" && inst.value.kind !== "const_float") {
-        throw new WasmUnsupportedError({
+  // WASM supports integer, float, and string constants here.
+  // Boolean constants remain unsupported.
+  if (
+    inst.value.kind !== "const_int" &&
+    inst.value.kind !== "const_float" &&
+    inst.value.kind !== "const_string"
+  ) {
+    throw new WasmUnsupportedError({
           code: WASM_CODES.UNSUPPORTED_INSTRUCTION,
           functionName: fn.sourceName,
-          message: `only integer and float constants are supported yet (found '${inst.value.kind}' at id %${inst.id}) — bool/string constants are a later sub-phase`,
+          message: `only integer, float, and string constants are supported yet (found '${inst.value.kind}' at id %${inst.id}) — bool constants are a later sub-phase`,
         });
       }
       continue;

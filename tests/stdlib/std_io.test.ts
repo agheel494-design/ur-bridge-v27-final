@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { makeHostStub } from "../../tools/backend/differential-runner.js";
 import { readFileSync } from "fs";
 import { lex } from "../../src/compiler/frontend/lexer.js";
 import { parse } from "../../src/compiler/frontend/parser.js";
@@ -63,16 +64,50 @@ describe("std.io (UR Standard Library v1.0 Foundation Sprint) — C Backend", ()
 });
 
 describe("std.io — WASM Backend correctly rejects (documented limitation, same as std.math)", () => {
-  it("write/writeLine calls are rejected on WASM (no function-arguments support yet)", () => {
-    const src = libSrc + '\nfunction main(): int\n  write("hi")\n  return 0\nend\n';
+  it("write/writeLine execute correctly on WASM", async () => {
+    const cases = [
+      {
+        call: 'write("hi")',
+        expected: ["hi"],
+      },
+      {
+        call: 'writeLine("hi")',
+        expected: ["hi", "\n"],
+      },
+    ];
+
+  for (const testCase of cases) {
+    const src =
+      libSrc +
+      `\nfunction main(): int\n  ${testCase.call}\n  return 0\nend\n`;
+
     const { tokens } = lex(src);
     const { program } = parse(tokens);
     const ir = lowerToIR(program, "t.ur", "t");
-    expect(ir.ok).toBe(true); // reaches IR fine
-    if (ir.ok) {
-      let rejected = false;
-      try { emitWasmModule(ir.value); } catch { rejected = true; }
-      expect(rejected).toBe(true);
+
+    expect(ir.ok).toBe(true);
+
+    if (!ir.ok) {
+      continue;
     }
-  });
+
+    const wasmBytes = emitWasmModule(ir.value);
+    const stub = makeHostStub();
+
+    const { instance } = await WebAssembly.instantiate(
+      wasmBytes,
+      stub.importObject,
+    );
+
+    stub.setMemoryRefs(instance);
+
+    const main = instance.exports.main;
+    expect(typeof main).toBe("function");
+
+    const result = (main as CallableFunction)();
+
+    expect(result).toBe(0n);
+    expect(stub.printedStrings).toEqual(testCase.expected);
+  }
+});
 });
