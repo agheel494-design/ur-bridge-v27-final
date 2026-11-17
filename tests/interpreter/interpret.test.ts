@@ -111,6 +111,50 @@ describe("Interpreter — correctness vs the C Backend as ground truth", () => {
     expect(interpResult.stdout.trim()).toBe("15");
   });
 
+  it("array parameter mutation is visible to the caller", () => {
+    const result = interpretSrc(
+      "function mutate(xs: int[]): int\n" +
+      "  xs[1] = 99\n" +
+      "  return 0\n" +
+      "end\n" +
+      "function main(): int\n" +
+      "  let values: int[] = [10, 20, 30]\n" +
+      "  mutate(values)\n" +
+      "  if values[1] == 99\n" +
+      "    return 0\n" +
+      "  end\n" +
+      "  return 1\n" +
+      "end\n",
+    );
+
+    expect(result.stderr).toBe("");
+    expect(result.exitCode).toBe(0);
+  });
+
+  it("struct parameter mutation does not escape to the caller", () => {
+    const result = interpretSrc(
+      "struct Point\n" +
+      "  x: int\n" +
+      "  y: int\n" +
+      "end\n" +
+      "function mutate(p: Point): int\n" +
+      "  p.x = 99\n" +
+      "  return p.x\n" +
+      "end\n" +
+      "function main(): int\n" +
+      "  let p = Point(10, 20)\n" +
+      "  let inside: int = mutate(p)\n" +
+      "  if inside == 99 && p.x == 10\n" +
+      "    return 0\n" +
+      "  end\n" +
+      "  return 1\n" +
+      "end\n",
+    );
+
+    expect(result.stderr).toBe("");
+    expect(result.exitCode).toBe(0);
+  });
+
   it("structs (construction + field access) match", async () => {
     const { cResult, interpResult } = await compareToC("struct Point\n  x: int\n  y: int\nend\nfunction main(): int\n  let p = Point(3, 4)\n  print(p.x + p.y)\n  return 0\nend\n");
     expect(interpResult.stdout.trim()).toBe(cResult.stdout.trim());

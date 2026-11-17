@@ -840,7 +840,14 @@ class ${className}Main {
       if (matchingParam && (matchingParam.structLayout || matchingParam.arrayLength !== undefined)) {
         const paramIdx = fn.params.indexOf(matchingParam);
         const incoming = args[paramIdx];
-        slots.set(local.id, Array.isArray(incoming) ? [...incoming] : incoming);
+        slots.set(
+          local.id,
+          local.isArrayParam === true
+            ? incoming
+            : Array.isArray(incoming)
+              ? [...incoming]
+              : incoming,
+        );
         continue;
       }
       if (local.isArray) slots.set(local.id, new Array(local.length ?? 1).fill(undefined));
