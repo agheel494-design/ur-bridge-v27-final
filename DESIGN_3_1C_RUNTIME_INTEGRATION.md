@@ -1,6 +1,6 @@
 # Level 3.1C Design Document — Runtime Integration
 
-**Status: IMPLEMENTED AND VERIFIED; DOCUMENTATION CLOSURE IN PROGRESS.
+**Status: CLOSED — IMPLEMENTED, VERIFIED, AND DOCUMENTED.
 Level 3.1C Runtime Integration has been implemented incrementally through
 the defined sub-phases, preserving the staged discipline established for
 the WASM backend. The implementation and verification evidence now covers
