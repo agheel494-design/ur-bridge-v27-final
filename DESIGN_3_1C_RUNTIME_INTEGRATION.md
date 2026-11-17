@@ -1,11 +1,17 @@
 # Level 3.1C Design Document — Runtime Integration
 
-**Status: THEORETICAL DESIGN ONLY. No code written. Aligned with M2 in
-`UR_BRIDGE_V28_MASTER_ROADMAP.md`. Per that roadmap's own risk
-mitigation ("do not attempt WASM imports, Builtins, Host Functions,
-and the Memory Interface as one undifferentiated batch"), this
-document breaks M2 into sub-phases, matching the exact discipline
-already established for 3.1B.1 → 3.1B.5.**
+**Status: IMPLEMENTED AND VERIFIED; DOCUMENTATION CLOSURE IN PROGRESS.
+Level 3.1C Runtime Integration has been implemented incrementally through
+the defined sub-phases, preserving the staged discipline established for
+the WASM backend. The implementation and verification evidence now covers
+the runtime import mechanism, required host-import behavior, the shared
+string/array memory contract, UR-produced and host-returned string
+interoperability, local and extern call resolution, and the Local WASM
+String ABI. Full regression verification completed with 0 failures for
+the recorded run; skipped tests remain skipped and are not counted as
+verified behavior. This document is being updated to reflect the shipped
+implementation and its verified scope before Level 3.1C is formally
+declared CLOSED.**
 
 ---
 
@@ -283,3 +289,68 @@ dependency on M4 not captured in the original dependency graph.
 to prevent scope creep during implementation; §9 gives each sub-phase
 measurable Acceptance Criteria, usable directly by whoever implements
 and whoever independently reviews each batch.
+## 10. Implementation and Verification Status
+
+Level 3.1C has completed its implementation and verification work for the
+scope exercised by the recorded acceptance tests.
+
+### 3.1C.1 — WASM Import Mechanism
+
+**Status: IMPLEMENTED AND VERIFIED**
+
+Verified coverage includes:
+
+- Empty runtime import section behavior.
+- Required runtime imports are emitted when needed.
+- Missing required host imports fail rather than silently succeeding.
+- Local-call behavior remains covered alongside imported-function index handling.
+
+### 3.1C.2 — Host Functions
+
+**Status: IMPLEMENTED AND VERIFIED**
+
+Verified coverage includes successful host-function execution and explicit
+failure when a required runtime host import is unavailable.
+
+### 3.1C.3 — Memory Interface
+
+**Status: IMPLEMENTED AND VERIFIED FOR THE TESTED SCOPE**
+
+The implemented WASM string representation uses an `i32` linear-memory
+offset pointing to an 8-byte length header followed by UTF-8 payload bytes.
+Strings and arrays share the existing bump-allocation state.
+
+Recorded verification covers:
+
+- UR-produced ASCII string → Host reads the expected bytes/string.
+- UR-produced multi-byte UTF-8 string → Host reads the expected string.
+- Host-returned string → UR subsequently uses it.
+- String/array non-alias behavior for the tested cases.
+
+`const_string` literals are materialized at runtime using the shared memory
+allocation contract. No separate string allocator or WASM Data Section
+architecture was introduced by this work.
+
+### 3.1C.4 — Local and Extern Call Integration
+
+**Status: IMPLEMENTED AND VERIFIED FOR THE TESTED SCOPE**
+
+Recorded verification covers:
+
+- Existing local WASM calls.
+- Extern import execution.
+- Rejection of unresolved/non-declared calls.
+- Local string parameters represented as `i32` pointers.
+- Local string returns represented as `i32` pointers.
+- End-to-end `write("hi")` execution.
+- End-to-end `writeLine("hi")` execution.
+
+### Regression and Integration Evidence
+
+The recorded full regression run completed with:
+
+- 171 test files passed.
+- 13 test files skipped.
+- 3711 tests passed.
+- 32 tests skipped.
+- 0 failures.
