@@ -22,6 +22,8 @@ import { lex } from "./src/compiler/frontend/lexer.js";
 import { parse } from "./src/compiler/frontend/parser.js";
 import { lowerToIR } from "./src/compiler/codegen/lower-to-ir.js";
 import { emitWasmModule } from "./src/backend/wasm/emit-wasm.js";
+import { analyze } from "./src/compiler/semantic/index.js";
+import { typeCheck } from "./src/compiler/typesystem/checker.js";
 // or, for the C Backend instead of WASM:
 // import { emitC } from "./src/backend/c/emit-c.js";
 
@@ -41,13 +43,26 @@ if (errors.length > 0) {
   process.exit(1);
 }
 
-// 3. Lower to IR
+// 3. Semantic analysis
+const semantic = analyze(program);
+if (!semantic.valid) {
+  console.error("Semantic errors:", semantic.diagnostics);
+  process.exit(1);
+}
+
+// 4. Type checking
+const types = typeCheck(program);
+if (!types.valid) {
+  console.error("Type errors:", types.diagnostics);
+  process.exit(1);
+}
+
+// 5. Lower to IR
 const ir = lowerToIR(program, "example.ur", "example");
 if (!ir.ok) {
   console.error("Lowering failed:", ir.diagnostics);
   process.exit(1);
 }
-
 // 4a. Emit WASM
 const wasmBytes = emitWasmModule(ir.value);
 // wasmBytes is a Uint8Array — write it to a .wasm file, or run it
