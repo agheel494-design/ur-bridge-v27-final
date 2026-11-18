@@ -2,7 +2,7 @@ import { resolve } from "node:path";
 import { describe, it, expect } from "vitest";
 import { createPlatformExecutor } from "../../../src/ffi/native/executor-factory.js";
 
-describe("WindowsExecutor missing symbol", () => {
+describe.skipIf(process.platform !== "win32")("WindowsExecutor missing symbol", () => {
   it("returns an error for a symbol that does not exist", () => {
     const executor = createPlatformExecutor("windows");
     const handle = executor.load(

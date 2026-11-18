@@ -2,7 +2,7 @@
 import { createPlatformExecutor } from "../../../src/ffi/native/executor-factory.js";
 import { NativeFfiLoader } from "../../../src/ffi/native/loader.js";
 
-describe("WindowsExecutor load failure", () => {
+describe.skipIf(process.platform !== "win32")("WindowsExecutor load failure", () => {
   it("reports a missing DLL without claiming success", () => {
     const loader = new NativeFfiLoader(createPlatformExecutor("windows"));
 

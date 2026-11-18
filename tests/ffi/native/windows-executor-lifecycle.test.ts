@@ -2,7 +2,7 @@ import { resolve } from "node:path";
 import { describe, it, expect } from "vitest";
 import { createPlatformExecutor } from "../../../src/ffi/native/executor-factory.js";
 
-describe("WindowsExecutor lifecycle", () => {
+describe.skipIf(process.platform !== "win32")("WindowsExecutor lifecycle", () => {
   it("rejects calls after the native library is unloaded", () => {
     const executor = createPlatformExecutor("windows");
     const handle = executor.load(
