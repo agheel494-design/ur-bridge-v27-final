@@ -1,4 +1,19 @@
-# UR-Bridge
+# UR Programming Language
+
+**A multilingual programming language built for humans.**
+
+
+**UR V1.0 · Stable Release · C Backend · WebAssembly**
+
+[Download V1.0](https://github.com/agheel494-design/ur-bridge-v27-final/releases/tag/v1.0.0) · [Getting Started](docs/INSTALLATION_GUIDE.md) · [Documentation](docs/) · [Examples](examples/)
+---
+
+
+## Why UR?
+
+- **Multilingual by design** — UR is designed around a human-readable, multilingual programming experience.
+- **A practical toolchain** — the project includes a real CLI, C execution path, WebAssembly backend, and package-management workflow.
+- **Verified, not aspirational** — supported features and known limitations are documented separately so implemented capabilities remain distinguishable from deferred scope.
 
 **A compiler for the UR programming language**, targeting a C Backend
 (the primary, CLI-reachable execution path) and including an
@@ -26,10 +41,7 @@ context.
 
 ## Status
 
-**V1.0 release candidate — not released.** The V1.0 release has not
-been authorized. What has been verified on each platform for this
-candidate, and with which evidence, is stated in
-`SUPPORTED_PLATFORMS.md`.
+**UR V1.0 is released and published as `v1.0.0`.** The final release is anchored to commit `82ccb01ceee47ffe8dd00aa7358208e5d22a772d`. Final verification and publication evidence is recorded in `UR_V1_0_FINAL_RELEASE_EVIDENCE.md`.
 
 *Earlier field test (not evidence for this candidate):*
 `V1_0_FINAL_FROZEN_BASELINE.md` records a Windows 10 field test
