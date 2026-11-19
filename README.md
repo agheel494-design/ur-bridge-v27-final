@@ -1,5 +1,7 @@
 # UR Programming Language
 
+Start here: UR_LANGUAGE_V1_0.md — Official UR V1.0 Developer Guide.
+
 **A multilingual programming language built for humans.**
 
 
