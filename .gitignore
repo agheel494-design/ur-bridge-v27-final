@@ -33,3 +33,6 @@ installer/windows/installer-output/
 
 tmp/
 backups/
+
+# Local staged-tree verification workspace
+/STAGED_TREE_VERIFY/
