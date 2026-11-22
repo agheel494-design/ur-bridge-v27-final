@@ -188,6 +188,10 @@ The developer-facing map of the V1.0 language, implemented capabilities, limitat
 
 [UR V1.0 Final Release Evidence](UR_V1_0_FINAL_RELEASE_EVIDENCE.md) records release identity and verification evidence. It is not a replacement for the language specification or current capability guide.
 
+### Project identity and rights
+
+[Project Identity and Copyright](COPYRIGHT.md) records UR project identity, authorship, provenance, and release-integrity evidence. Licensing permissions remain governed by the repository LICENSE file.
+
 ---
 
 ## V1.0 boundaries
