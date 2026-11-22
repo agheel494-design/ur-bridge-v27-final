@@ -167,7 +167,7 @@ All of the above are tracked, scoped future work — see
 - **Duplicate `type` alias names are silently allowed** (found by adversarial audit, unclassified — not confirmed as a defect vs. intentional shadowing) — `type A = int` then `type A = float` produces no diagnostic.
 - Single-element arrays previously produced invalid C — this specific
   issue is FIXED (see `issues/level-2.8-single-element-array-c-backend-bug.md`).
-- No dynamic array length, no arrays of arrays.
+- No dynamic array length. Nested arrays are supported in V1.0.
 - **FIXED — returning/assigning an array by bare identifier produced
   invalid C, not a clear rejection** (Stage Functions bug hunt,
   Compiler & Runtime Stabilization phase). `resolveVar()` unconditionally
